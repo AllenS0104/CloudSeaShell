@@ -1,4 +1,4 @@
-package com.mywebapp
+package com.cloudseashell.app
 
 import android.app.NotificationChannel
 import android.app.NotificationManager

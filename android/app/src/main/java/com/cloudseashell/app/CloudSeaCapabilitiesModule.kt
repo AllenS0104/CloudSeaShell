@@ -1,4 +1,4 @@
-package com.mywebapp
+package com.cloudseashell.app
 
 import android.app.AlarmManager
 import android.app.PendingIntent

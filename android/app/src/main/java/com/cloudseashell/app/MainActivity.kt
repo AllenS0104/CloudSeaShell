@@ -1,4 +1,4 @@
-package com.mywebapp
+package com.cloudseashell.app
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
