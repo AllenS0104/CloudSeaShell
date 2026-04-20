@@ -1,0 +1,17 @@
+{
+  "name": "天气地图与云海预测",
+  "short_name": "天气地图",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#14141e",
+  "theme_color": "#0095ff",
+  "icons": [
+    {
+      "src": "./assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
