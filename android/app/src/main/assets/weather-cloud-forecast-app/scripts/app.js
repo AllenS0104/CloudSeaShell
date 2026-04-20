@@ -131,10 +131,11 @@ function notifyObservationReminder(reminder) {
   const message = `云海提醒：现在适合为 ${reminder.location.name || '当前地点'} 出发，建议守候 ${reminder.windowLabel || '推荐时段'}。`;
   setStatus(message, 'warning');
   if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-    new Notification(reminder.title, {
+    const notification = new Notification(reminder.title, { // eslint-disable-line no-new
       body: reminder.body || message,
       tag: reminder.reminderId,
     });
+    notification.onclick = () => window.focus();
   }
   dispatchAppEvent('cloudsea:reminder:fired', reminder);
 }

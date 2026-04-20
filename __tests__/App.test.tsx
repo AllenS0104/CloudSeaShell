@@ -26,6 +26,7 @@ jest.spyOn(global, 'fetch').mockResolvedValue({
 } as Response);
 
 jest.mock('react-native-webview', () => {
+  // eslint-disable-next-line @typescript-eslint/no-shadow
   const React = require('react');
   const { View } = require('react-native');
 
