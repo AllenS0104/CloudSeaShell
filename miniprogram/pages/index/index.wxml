@@ -256,7 +256,8 @@
   </view>
 
   <!-- Photography Popup Panel -->
-  <view class="photo-overlay {{showPhoto ? 'photo-overlay-show' : ''}}" bindtap="onClosePhoto">
+  <view class="photo-overlay {{showPhoto ? 'photo-overlay-show' : ''}}">
+    <view class="photo-overlay-mask" bindtap="onClosePhoto"></view>
     <view class="photo-panel" catchtap="">
       <view class="photo-panel-header">
         <view class="photo-panel-title">📸 摄影参数推荐</view>
