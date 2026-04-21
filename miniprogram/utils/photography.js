@@ -265,6 +265,121 @@ function getFilterRecommendations(lighting, cloudSeaScore, windSpeed) {
 }
 
 /**
+ * Exposure table: multiple equivalent exposures for current EV (Planit style)
+ */
+function buildExposureTable(ev, cloudSeaScore) {
+  const hasCloudSea = cloudSeaScore >= 55;
+  const table = [];
+
+  // EV = log2(f² / t) + log2(ISO/100)
+  // For a given EV and ISO, t = f² / (2^(EV - log2(ISO/100)))
+  function shutterForEV(aperture, iso, targetEV) {
+    const apertureNum = parseFloat(aperture.replace('f/', ''));
+    const evAdjusted = targetEV - Math.log2(iso / 100);
+    const t = (apertureNum * apertureNum) / Math.pow(2, evAdjusted);
+    if (t >= 30) return '30s+';
+    if (t >= 10) return `${Math.round(t)}s`;
+    if (t >= 1) return `${t.toFixed(1)}s`;
+    if (t >= 0.1) return `1/${Math.round(1 / t)}s`;
+    if (t >= 0.01) return `1/${Math.round(1 / t)}s`;
+    return `1/${Math.round(1 / t)}s`;
+  }
+
+  // Silky cloud sea (long exposure)
+  if (hasCloudSea) {
+    table.push({
+      aperture: 'f/11', shutter: shutterForEV('f/11', 100, ev - 3),
+      iso: '100', scene: '☁️ 丝绸云海（ND8）',
+    });
+  }
+
+  // Standard landscape
+  table.push({
+    aperture: 'f/8', shutter: shutterForEV('f/8', 100, ev),
+    iso: '100', scene: '🏔️ 标准风景',
+  });
+
+  // Handheld
+  table.push({
+    aperture: 'f/5.6', shutter: shutterForEV('f/5.6', 400, ev),
+    iso: '400', scene: '🤳 手持拍摄',
+  });
+
+  // Night / blue hour
+  if (ev <= 8) {
+    table.push({
+      aperture: 'f/2.8', shutter: shutterForEV('f/2.8', 1600, ev),
+      iso: '1600', scene: '🌙 夜景/蓝调',
+    });
+  }
+
+  return table;
+}
+
+/**
+ * Depth of field calculation (simplified)
+ * Hyperfocal distance and DOF range for landscape
+ */
+function calculateDepthOfField(focalMm, aperture) {
+  const f = parseFloat(String(focalMm)) || 24;
+  const N = parseFloat(String(aperture).replace('f/', '')) || 8;
+  const CoC = 0.03; // Circle of confusion for full frame (mm)
+
+  // Hyperfocal = f² / (N × CoC) + f
+  const hyperfocal = (f * f) / (N * CoC) + f; // in mm
+  const hyperfocalM = hyperfocal / 1000;
+
+  let range, note;
+  if (hyperfocalM < 3) {
+    range = `${hyperfocalM.toFixed(1)}m ~ ∞`;
+    note = '近距景深充足，适合前景构图';
+  } else if (hyperfocalM < 10) {
+    range = `${hyperfocalM.toFixed(1)}m ~ ∞`;
+    note = '对焦超焦距即可前后皆清';
+  } else {
+    range = `${hyperfocalM.toFixed(0)}m ~ ∞`;
+    note = '长焦景深较浅，注意对焦点选择';
+  }
+
+  return {
+    hyperfocal: `${hyperfocalM < 10 ? hyperfocalM.toFixed(1) : Math.round(hyperfocalM)}m`,
+    range,
+    note,
+  };
+}
+
+/**
+ * Celestial info from sunrise/sunset
+ */
+function buildCelestialInfo(sunriseTime, sunsetTime) {
+  if (!sunriseTime && !sunsetTime) return null;
+
+  function formatTime(t) {
+    if (!t) return '--:--';
+    return t.slice(11, 16);
+  }
+
+  // Approximate sun direction from time (simplified for China)
+  function sunDirection(t, isSunrise) {
+    if (!t) return '';
+    const month = new Date(t).getMonth();
+    if (isSunrise) {
+      if (month >= 3 && month <= 8) return '东偏北';
+      return '东偏南';
+    }
+    if (month >= 3 && month <= 8) return '西偏北';
+    return '西偏南';
+  }
+
+  return {
+    sunrise: formatTime(sunriseTime),
+    sunset: formatTime(sunsetTime),
+    sunriseDir: sunriseTime ? `方位：${sunDirection(sunriseTime, true)}` : '',
+    sunsetDir: sunsetTime ? `方位：${sunDirection(sunsetTime, false)}` : '',
+  };
+}
+
+/**
  * Main entry: generate full photography recommendations
  */
 function generatePhotoRecommendations({
@@ -282,6 +397,9 @@ function generatePhotoRecommendations({
   const camera = generateCameraParams(ev, lighting, windSpeed, cloudSeaScore);
   const phone = generatePhoneParams(ev, lighting, windSpeed, cloudSeaScore);
   const filters = getFilterRecommendations(lighting, cloudSeaScore, windSpeed);
+  const exposureTable = buildExposureTable(ev, cloudSeaScore);
+  const depthOfField = calculateDepthOfField(24, camera.aperture);
+  const celestial = buildCelestialInfo(sunriseTime, sunsetTime);
 
   // Composition tips based on conditions
   const composition = [];
@@ -306,6 +424,9 @@ function generatePhotoRecommendations({
     camera,
     phone,
     filters,
+    exposureTable,
+    depthOfField,
+    celestial,
     composition: composition.slice(0, 4),
     summary: buildPhotoSummary(lighting, cloudSeaScore, windSpeed),
   };

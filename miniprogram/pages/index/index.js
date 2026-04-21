@@ -31,6 +31,7 @@ Page({
     fusionResult: null,
     fusionLoading: false,
     photoParams: null,
+    showPhoto: false,
   },
 
   onLoad() {
@@ -83,6 +84,14 @@ Page({
     } catch (err) {
       this.setData({ statusText: `定位失败：${err.message}`, statusType: 'warning' });
     }
+  },
+
+  onOpenPhoto() {
+    this.setData({ showPhoto: true });
+  },
+
+  onClosePhoto() {
+    this.setData({ showPhoto: false });
   },
 
   onDayChange(e) {
