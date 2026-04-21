@@ -8,6 +8,11 @@ const WEATHER_ENDPOINTS = [
   'https://ensemble-api.open-meteo.com',
 ];
 
+const ELEVATION_ENDPOINTS = [
+  'https://api.open-meteo.com/v1/elevation',
+  'https://api.open-elevation.com/api/v1/lookup',
+];
+
 function wxRequest(url, options = {}) {
   const { timeoutMs = 10000 } = options;
   return new Promise((resolve, reject) => {
@@ -59,17 +64,36 @@ async function fetchWeather(lat, lon) {
 }
 
 async function fetchElevation(lat, lon) {
-  const data = await wxRequest(
-    `https://api.open-elevation.com/api/v1/lookup?locations=${lat},${lon}`,
-    { timeoutMs: 5000 },
-  );
-  const value = data?.results?.[0]?.elevation;
-
-  if (typeof value !== 'number' || !isFinite(value)) {
-    throw new Error('海拔数据格式无效');
+  // Try Open-Meteo elevation first (faster, more reliable in China)
+  try {
+    const data = await wxRequest(
+      `${ELEVATION_ENDPOINTS[0]}?latitude=${lat}&longitude=${lon}`,
+      { timeoutMs: 5000 },
+    );
+    const value = data?.elevation?.[0] ?? data?.elevation;
+    if (typeof value === 'number' && isFinite(value)) {
+      return value;
+    }
+  } catch (err) {
+    console.warn('Open-Meteo elevation failed, trying fallback', err.message);
   }
 
-  return value;
+  // Fallback to Open-Elevation
+  try {
+    const data = await wxRequest(
+      `${ELEVATION_ENDPOINTS[1]}?locations=${lat},${lon}`,
+      { timeoutMs: 5000 },
+    );
+    const value = data?.results?.[0]?.elevation;
+    if (typeof value === 'number' && isFinite(value)) {
+      return value;
+    }
+  } catch (err) {
+    console.warn('Open-Elevation also failed', err.message);
+  }
+
+  // Return default if all fail
+  return 300;
 }
 
 async function geocodeAddress(address) {
