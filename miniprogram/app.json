@@ -1,0 +1,22 @@
+{
+  "pages": [
+    "pages/index/index"
+  ],
+  "window": {
+    "backgroundTextStyle": "dark",
+    "navigationBarBackgroundColor": "#0b2f5b",
+    "navigationBarTitleText": "云海观测决策台",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#0b2f5b"
+  },
+  "permission": {
+    "scope.userLocation": {
+      "desc": "用于获取您的当前位置以查询附近天气和云海预测"
+    }
+  },
+  "requiredPrivateInfos": [
+    "getLocation"
+  ],
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

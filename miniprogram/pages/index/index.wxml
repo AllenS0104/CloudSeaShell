@@ -1,0 +1,150 @@
+<view class="page-container">
+  <!-- Header -->
+  <view class="card header">
+    <view class="header-eyebrow">CLOUD SEA FORECAST LAB</view>
+    <view class="header-title">云海观测决策台</view>
+    <view class="header-subtitle">面向摄影、徒步与山地观测的专业天气研判工具</view>
+    <view class="controls">
+      <input class="search-input" placeholder="输入地点（默认：北京）" value="{{searchText}}" bindinput="onSearchInput" bindconfirm="onSearch" />
+      <button class="btn-primary" bindtap="onSearch">确认</button>
+      <button class="btn-locate" bindtap="onLocate">📍 当前位置</button>
+    </view>
+    <picker mode="selector" range="{{dayLabels}}" value="{{selectedDayIndex}}" bindchange="onDayChange">
+      <view class="btn-primary" style="margin-top:16rpx;text-align:center;">{{dayLabels[selectedDayIndex] || '选择日期'}}</view>
+    </picker>
+  </view>
+
+  <!-- Status Banner -->
+  <view wx:if="{{statusText}}" class="status-banner status-{{statusType}}">{{statusText}}</view>
+
+  <!-- Loading -->
+  <view wx:if="{{loading}}" class="loading-text">正在加载天气数据...</view>
+
+  <!-- Main Content -->
+  <view wx:if="{{!loading && weatherData}}">
+    <!-- Map -->
+    <view class="card">
+      <view class="section-heading">
+        <view class="section-eyebrow">OBSERVATION DASHBOARD</view>
+        <view class="section-title">观测条件总览</view>
+      </view>
+      <map class="map-container"
+        latitude="{{lat}}" longitude="{{lon}}"
+        scale="10" show-location
+        markers="{{markers}}"
+        bindtap="onMapTap">
+      </map>
+
+      <!-- Weather Stats -->
+      <view class="weather-main">
+        <view class="temp">{{currentTemp}}°<text class="temp-sub">/{{currentFeelsLike}}°</text></view>
+        <view class="location-text">{{locationName}}</view>
+      </view>
+
+      <view class="stats-grid">
+        <view class="stat-card">
+          <text class="stat-icon">💧</text>
+          <view><view class="stat-label">湿度</view><view class="stat-value">{{currentHumidity}}%</view></view>
+        </view>
+        <view class="stat-card">
+          <text class="stat-icon">🌬️</text>
+          <view><view class="stat-label">风速</view><view class="stat-value">{{currentWind}} m/s</view></view>
+        </view>
+        <view class="stat-card">
+          <text class="stat-icon">☁️</text>
+          <view><view class="stat-label">云量</view><view class="stat-value">{{currentCloudCover}}%</view></view>
+        </view>
+        <view class="stat-card">
+          <text class="stat-icon">⛰️</text>
+          <view><view class="stat-label">海拔</view><view class="stat-value">{{elevation}} m</view></view>
+        </view>
+        <view class="stat-card">
+          <text class="stat-icon">🌫️</text>
+          <view><view class="stat-label">云底高度</view><view class="stat-value">{{analysis.cloudBase}} m</view></view>
+        </view>
+        <view class="stat-card">
+          <text class="stat-icon">💧</text>
+          <view><view class="stat-label">露点差</view><view class="stat-value">{{currentDewGap}}°C</view></view>
+        </view>
+      </view>
+    </view>
+
+    <!-- Forecast -->
+    <view class="card">
+      <view class="section-heading">
+        <view class="section-eyebrow">FORECAST ASSESSMENT</view>
+        <view class="section-title">云海判断</view>
+      </view>
+
+      <view class="forecast-card">
+        <view class="forecast-title">{{selectedDayIndex === 0 ? '今日' : '全天'}}云海预测</view>
+        <view class="forecast-result {{analysis.suggestion ? 'forecast-positive' : 'forecast-negative'}}">
+          {{analysis.resultText}}
+        </view>
+      </view>
+
+      <view class="forecast-summary">{{analysis.summary}}</view>
+
+      <view class="forecast-reasons">
+        <view wx:for="{{analysis.reasons}}" wx:key="index" class="reason-item">{{item}}</view>
+      </view>
+
+      <view class="disclaimer">⚠️ 预测仅供参考，基于数值天气模式估算，实际云海受微地形、局地气流等因素影响，请结合现场条件判断。</view>
+    </view>
+
+    <!-- Guidance -->
+    <view class="card" wx:if="{{guidance}}">
+      <view class="section-heading">
+        <view class="section-eyebrow">ACTION GUIDANCE</view>
+        <view class="section-title">观测行动建议</view>
+      </view>
+      <view class="guidance-card">
+        <view class="guidance-level guidance-{{guidance.goClass}}">{{guidance.goLevel}}</view>
+        <view class="guidance-grid">
+          <view class="guidance-item">
+            <view class="guidance-label">推荐时段</view>
+            <view class="guidance-value">{{guidance.recommendedWindow}}</view>
+          </view>
+          <view class="guidance-item">
+            <view class="guidance-label">日出日落</view>
+            <view class="guidance-value">{{guidance.daylightWindow}}</view>
+          </view>
+          <view class="guidance-item">
+            <view class="guidance-label">机位建议</view>
+            <view class="guidance-value">{{guidance.viewpointAdvice}}</view>
+          </view>
+        </view>
+        <view class="forecast-reasons" style="margin-top:16rpx;">
+          <view wx:for="{{guidance.actionItems}}" wx:key="index" class="reason-item">{{item}}</view>
+        </view>
+      </view>
+    </view>
+
+    <!-- Hourly -->
+    <view class="card">
+      <view class="section-heading">
+        <view class="section-eyebrow">HOURLY TIMELINE</view>
+        <view class="section-title">逐小时预报</view>
+      </view>
+      <view class="hourly-section">
+        <view class="hourly-header">
+          <view class="hourly-col-time">时间</view>
+          <view class="hourly-col-temp">🌡️温度</view>
+          <view class="hourly-col-cloud">🌫️云底</view>
+          <view class="hourly-col-precip">💦降水</view>
+        </view>
+        <scroll-view scroll-y style="max-height:600rpx;">
+          <view wx:for="{{hourlyList}}" wx:key="time" class="hour-item">
+            <view class="hour-time">{{item.time}}</view>
+            <view class="hour-value">{{item.temp}}°</view>
+            <view class="hour-value">{{item.cloudBase}}m</view>
+            <view class="hour-value">{{item.precip}}%</view>
+          </view>
+        </scroll-view>
+      </view>
+    </view>
+
+    <!-- SOS -->
+    <button class="sos-button" bindtap="onSOS">🆘 SOS 紧急求救</button>
+  </view>
+</view>

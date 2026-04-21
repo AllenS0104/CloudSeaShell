@@ -1,0 +1,339 @@
+page, navigator, view, text, input, button, map, scroll-view, picker, image {
+  box-sizing: border-box;
+}
+
+page {
+  background-color: #0b2f5b;
+  color: #eef4ff;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif;
+  font-size: 28rpx;
+}
+
+.card {
+  background: rgba(14, 20, 32, 0.72);
+  border: 1rpx solid rgba(173, 199, 255, 0.18);
+  border-radius: 24rpx;
+  padding: 30rpx;
+  margin-bottom: 20rpx;
+  backdrop-filter: blur(10px);
+}
+
+.header {
+  text-align: center;
+  padding: 30rpx 20rpx;
+}
+
+.header-eyebrow {
+  font-size: 22rpx;
+  color: #aab4c5;
+  letter-spacing: 4rpx;
+  text-transform: uppercase;
+}
+
+.header-title {
+  font-size: 44rpx;
+  font-weight: 600;
+  color: #fff;
+  margin: 10rpx 0;
+}
+
+.header-subtitle {
+  font-size: 24rpx;
+  color: #aab4c5;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  justify-content: center;
+  align-items: center;
+  margin-top: 20rpx;
+}
+
+.search-input {
+  flex: 1;
+  min-width: 300rpx;
+  padding: 16rpx 24rpx;
+  border: 1rpx solid rgba(173, 199, 255, 0.18);
+  border-radius: 12rpx;
+  background: rgba(255, 255, 255, 0.1);
+  color: #eef4ff;
+  font-size: 28rpx;
+}
+
+.btn-primary {
+  padding: 16rpx 32rpx;
+  border-radius: 12rpx;
+  background: #3aa4ff;
+  color: #fff;
+  font-size: 28rpx;
+  border: none;
+}
+
+.btn-locate {
+  padding: 16rpx 32rpx;
+  border-radius: 12rpx;
+  background: #28a745;
+  color: #fff;
+  font-size: 28rpx;
+  border: none;
+}
+
+.section-heading {
+  margin: 30rpx 0 16rpx;
+}
+
+.section-eyebrow {
+  font-size: 20rpx;
+  color: #aab4c5;
+  letter-spacing: 3rpx;
+  text-transform: uppercase;
+}
+
+.section-title {
+  font-size: 34rpx;
+  font-weight: 600;
+  color: #fff;
+}
+
+.map-container {
+  width: 100%;
+  height: 400rpx;
+  border-radius: 16rpx;
+  overflow: hidden;
+  margin-bottom: 20rpx;
+}
+
+.stats-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+
+.stat-card {
+  flex: 1;
+  min-width: 200rpx;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 20rpx;
+  border-radius: 16rpx;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.stat-icon {
+  font-size: 36rpx;
+}
+
+.stat-label {
+  font-size: 22rpx;
+  color: #aab4c5;
+}
+
+.stat-value {
+  font-size: 28rpx;
+  font-weight: 500;
+}
+
+.forecast-card {
+  text-align: center;
+  margin: 20rpx 0;
+}
+
+.forecast-title {
+  font-size: 30rpx;
+  font-weight: 500;
+}
+
+.forecast-result {
+  font-size: 36rpx;
+  font-weight: 600;
+  padding: 16rpx;
+  border-radius: 12rpx;
+  margin-top: 10rpx;
+}
+
+.forecast-positive {
+  color: #28a745;
+  background: rgba(40, 167, 69, 0.18);
+}
+
+.forecast-negative {
+  color: #6c757d;
+  background: rgba(108, 117, 125, 0.18);
+}
+
+.forecast-summary {
+  font-size: 26rpx;
+  color: #aab4c5;
+  margin-top: 12rpx;
+  line-height: 1.6;
+}
+
+.forecast-reasons {
+  margin-top: 12rpx;
+  padding-left: 10rpx;
+}
+
+.reason-item {
+  font-size: 24rpx;
+  color: #ccd;
+  line-height: 1.8;
+}
+
+.reason-item::before {
+  content: '• ';
+  color: #3aa4ff;
+}
+
+.disclaimer {
+  margin-top: 16rpx;
+  padding: 12rpx 20rpx;
+  font-size: 22rpx;
+  color: #aab4c5;
+  background: rgba(240, 173, 78, 0.08);
+  border-left: 4rpx solid #f0ad4e;
+  border-radius: 8rpx;
+  line-height: 1.6;
+}
+
+.weather-main {
+  text-align: center;
+  margin-bottom: 30rpx;
+}
+
+.temp {
+  font-size: 80rpx;
+  font-weight: 600;
+  color: #fff;
+}
+
+.temp-sub {
+  font-size: 40rpx;
+  color: #aab4c5;
+}
+
+.location-text {
+  font-size: 28rpx;
+  color: #aab4c5;
+}
+
+.status-banner {
+  padding: 16rpx 24rpx;
+  border-radius: 12rpx;
+  margin-bottom: 16rpx;
+  font-size: 26rpx;
+}
+
+.status-info {
+  background: rgba(0, 149, 255, 0.18);
+  color: #3aa4ff;
+}
+
+.status-warning {
+  background: rgba(240, 173, 78, 0.18);
+  color: #f0ad4e;
+}
+
+.status-success {
+  background: rgba(40, 167, 69, 0.18);
+  color: #28a745;
+}
+
+.loading-text {
+  text-align: center;
+  color: #aab4c5;
+  padding: 40rpx;
+}
+
+.hourly-section {
+  margin-top: 20rpx;
+}
+
+.hourly-header {
+  display: flex;
+  padding-bottom: 12rpx;
+  border-bottom: 1rpx solid rgba(173, 199, 255, 0.18);
+  font-weight: 600;
+  color: #aab4c5;
+  font-size: 24rpx;
+}
+
+.hourly-col-time { width: 120rpx; }
+.hourly-col-temp { flex: 1; text-align: center; }
+.hourly-col-cloud { flex: 1; text-align: center; }
+.hourly-col-precip { flex: 1; text-align: center; }
+
+.hour-item {
+  display: flex;
+  align-items: center;
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid rgba(173, 199, 255, 0.08);
+  font-size: 26rpx;
+}
+
+.hour-time {
+  width: 120rpx;
+  font-weight: 600;
+}
+
+.hour-value {
+  flex: 1;
+  text-align: center;
+}
+
+.guidance-card {
+  margin-top: 20rpx;
+  padding: 24rpx;
+  border-radius: 16rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(180deg, rgba(9, 18, 32, 0.72), rgba(9, 18, 32, 0.48));
+}
+
+.guidance-level {
+  font-size: 40rpx;
+  font-weight: 600;
+  text-align: center;
+  margin: 12rpx 0;
+}
+
+.guidance-go { color: #28a745; }
+.guidance-watch { color: #f0ad4e; }
+.guidance-stop { color: #dc3545; }
+
+.guidance-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  margin-top: 16rpx;
+}
+
+.guidance-item {
+  flex: 1;
+  min-width: 280rpx;
+}
+
+.guidance-label {
+  font-size: 22rpx;
+  color: #aab4c5;
+}
+
+.guidance-value {
+  font-size: 26rpx;
+  color: #eef4ff;
+  margin-top: 4rpx;
+}
+
+.sos-button {
+  display: block;
+  width: 100%;
+  padding: 20rpx;
+  margin-top: 30rpx;
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #fff;
+  background: #dc3545;
+  border: none;
+  border-radius: 12rpx;
+}
