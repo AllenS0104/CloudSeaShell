@@ -92,6 +92,44 @@
       <view class="disclaimer">⚠️ 预测仅供参考，基于数值天气模式估算，实际云海受微地形、局地气流等因素影响，请结合现场条件判断。</view>
     </view>
 
+    <!-- Sunset Glow Prediction -->
+    <view class="card" wx:if="{{glowAnalysis}}">
+      <view class="section-heading">
+        <view class="section-eyebrow">SUNSET GLOW FORECAST</view>
+        <view class="section-title">🌅 晚霞 / 火烧云预测</view>
+      </view>
+
+      <view class="forecast-card">
+        <view class="forecast-result {{glowAnalysis.score >= 50 ? 'forecast-positive' : 'forecast-negative'}}" style="{{glowAnalysis.score >= 70 ? 'color:#ff6b35;background:rgba(255,107,53,0.18);' : ''}}">
+          {{glowAnalysis.resultText}}
+        </view>
+      </view>
+
+      <view class="stats-grid" style="margin-top:16rpx;" wx:if="{{glowAnalysis.bestSunrise || glowAnalysis.bestSunset}}">
+        <view class="stat-card" wx:if="{{glowAnalysis.bestSunrise}}">
+          <text class="stat-icon">🌄</text>
+          <view><view class="stat-label">日出霞光</view><view class="stat-value">{{glowAnalysis.bestSunrise.score}} 分</view></view>
+        </view>
+        <view class="stat-card" wx:if="{{glowAnalysis.bestSunset}}">
+          <text class="stat-icon">🌇</text>
+          <view><view class="stat-label">日落霞光</view><view class="stat-value">{{glowAnalysis.bestSunset.score}} 分</view></view>
+        </view>
+      </view>
+
+      <view class="forecast-summary">{{glowAnalysis.summary}}</view>
+      <view class="forecast-reasons">
+        <view wx:for="{{glowAnalysis.reasons}}" wx:key="index" class="reason-item">{{item}}</view>
+      </view>
+      <view class="disclaimer">🌅 晚霞预测基于中高层云量、低云遮挡、湿度和能见度综合评估。最佳观赏窗口为日落前 30 分钟至日落后 15 分钟。</view>
+    </view>
+
+    <!-- Safety Alerts -->
+    <view wx:if="{{safetyAlerts.length}}" style="margin-bottom:20rpx;">
+      <view wx:for="{{safetyAlerts}}" wx:key="text" class="safety-alert safety-{{item.type}}">
+        <text>{{item.icon}} {{item.text}}</text>
+      </view>
+    </view>
+
     <!-- Guidance -->
     <view class="card" wx:if="{{guidance}}">
       <view class="section-heading">

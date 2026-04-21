@@ -325,6 +325,33 @@ page {
   margin-top: 4rpx;
 }
 
+/* Safety alerts */
+.safety-alert {
+  padding: 16rpx 24rpx;
+  border-radius: 12rpx;
+  margin-bottom: 12rpx;
+  font-size: 26rpx;
+  line-height: 1.6;
+}
+
+.safety-danger {
+  background: rgba(220, 53, 69, 0.18);
+  color: #ff6b6b;
+  border-left: 4rpx solid #dc3545;
+}
+
+.safety-warning {
+  background: rgba(240, 173, 78, 0.18);
+  color: #f0ad4e;
+  border-left: 4rpx solid #f0ad4e;
+}
+
+.safety-info {
+  background: rgba(0, 149, 255, 0.12);
+  color: #3aa4ff;
+  border-left: 4rpx solid #3aa4ff;
+}
+
 /* Photography section */
 .photo-summary {
   font-size: 28rpx;

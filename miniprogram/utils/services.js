@@ -78,8 +78,8 @@ async function fetchWeather(lat, lon) {
       const params = [
         `latitude=${lat}`,
         `longitude=${lon}`,
-        'current=temperature_2m,relative_humidity_2m,dew_point_2m,pressure_msl,cloud_cover,cloud_cover_low,visibility,wind_speed_10m,wind_direction_10m,precipitation,is_day',
-        'hourly=temperature_2m,relative_humidity_2m,dew_point_2m,pressure_msl,cloud_cover,cloud_cover_low,precipitation,visibility,precipitation_probability,wind_speed_10m,is_day',
+        'current=temperature_2m,apparent_temperature,relative_humidity_2m,dew_point_2m,pressure_msl,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,visibility,wind_speed_10m,wind_direction_10m,precipitation,weather_code,is_day',
+        'hourly=temperature_2m,apparent_temperature,relative_humidity_2m,dew_point_2m,pressure_msl,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,precipitation,visibility,precipitation_probability,wind_speed_10m,weather_code,cape,is_day',
         'daily=sunrise,sunset',
         'timezone=Asia/Shanghai',
         'model=icon_seamless,gfs_seamless',

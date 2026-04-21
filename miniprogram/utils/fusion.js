@@ -51,7 +51,7 @@ async function fetchModelWeather(lat, lon, modelId) {
   const params = [
     `latitude=${lat}`,
     `longitude=${lon}`,
-    'hourly=temperature_2m,relative_humidity_2m,dew_point_2m,pressure_msl,cloud_cover,cloud_cover_low,precipitation,visibility,precipitation_probability,wind_speed_10m',
+    'hourly=temperature_2m,apparent_temperature,relative_humidity_2m,dew_point_2m,pressure_msl,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,precipitation,visibility,precipitation_probability,wind_speed_10m,weather_code,cape,is_day',
     'daily=sunrise,sunset',
     'timezone=Asia/Shanghai',
     `model=${modelId}`,

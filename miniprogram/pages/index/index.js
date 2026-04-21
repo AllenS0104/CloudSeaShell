@@ -2,6 +2,7 @@ const calc = require('../../utils/calculations');
 const api = require('../../utils/services');
 const fusion = require('../../utils/fusion');
 const photo = require('../../utils/photography');
+const sunsetModule = require('../../utils/sunset');
 
 const DEFAULT_ELEVATION = 300;
 
@@ -32,6 +33,8 @@ Page({
     fusionLoading: false,
     photoParams: null,
     showPhoto: false,
+    glowAnalysis: null,
+    safetyAlerts: [],
   },
 
   onLoad() {
@@ -188,12 +191,12 @@ Page({
 
     // Guidance
     const sunrise = daily?.sunrise?.[selectedDayIndex];
-    const sunset = daily?.sunset?.[selectedDayIndex];
+    const sunsetVal = daily?.sunset?.[selectedDayIndex];
     const guidance = calc.buildObservationGuidance({
       analysis: dayAnalysis.bestHour || analysis,
       currentElevation: elevation,
       sunriseTime: sunrise,
-      sunsetTime: sunset,
+      sunsetTime: sunsetVal,
       bestTimeLabel: dayAnalysis.bestHour?.timeLabel,
     });
 
@@ -248,7 +251,7 @@ Page({
     const photoParams = photo.generatePhotoRecommendations({
       timeString: current?.time || bestHourTime,
       sunriseTime: sunrise,
-      sunsetTime: sunset,
+      sunsetTime: sunsetVal,
       cloudCover: analysis.cloudCover,
       visibility: analysis.visibility,
       windSpeed: analysis.windSpeed,
@@ -256,6 +259,42 @@ Page({
       elevation,
     });
     this.setData({ photoParams });
+
+    // Sunset glow analysis
+    const glowResult = sunsetModule.analyzeDayGlow(hourly, start, sunrise, sunsetVal);
+    this.setData({
+      glowAnalysis: {
+        score: glowResult.score,
+        level: glowResult.level,
+        label: glowResult.label,
+        resultText: glowResult.resultText,
+        summary: glowResult.summary,
+        reasons: glowResult.reasons,
+        bestSunrise: glowResult.bestSunrise ? { score: glowResult.bestSunrise.score, label: glowResult.bestSunrise.label } : null,
+        bestSunset: glowResult.bestSunset ? { score: glowResult.bestSunset.score, label: glowResult.bestSunset.label } : null,
+      },
+    });
+
+    // Safety alerts
+    const alerts = [];
+    const capeValues = (hourly.cape ?? []).slice(start, start + 24).map(v => Number(v ?? 0));
+    const maxCape = capeValues.length ? Math.max(...capeValues) : 0;
+    if (maxCape >= 1000) {
+      alerts.push({ type: 'danger', icon: '⛈️', text: `雷暴风险：CAPE ${Math.round(maxCape)} J/kg，山顶远离金属物体` });
+    } else if (maxCape >= 500) {
+      alerts.push({ type: 'warning', icon: '🌩️', text: `对流发展中：CAPE ${Math.round(maxCape)} J/kg，注意天气变化` });
+    }
+
+    const apparentTemp = current?.apparent_temperature ?? null;
+    if (apparentTemp !== null && apparentTemp < 5) {
+      alerts.push({ type: 'warning', icon: '🥶', text: `体感温度仅 ${Number(apparentTemp).toFixed(1)}°C，注意防寒保暖` });
+    }
+
+    if (elevation > 1500) {
+      alerts.push({ type: 'info', icon: '⛰️', text: '高海拔区域注意防晒和补水，紫外线显著增强' });
+    }
+
+    this.setData({ safetyAlerts: alerts });
   },
 
   async fetchFusion(lat, lon) {
