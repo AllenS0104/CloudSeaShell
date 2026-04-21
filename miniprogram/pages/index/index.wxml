@@ -294,18 +294,20 @@
         <!-- Device Selector -->
         <view class="photo-section">
           <view class="photo-device-title">📷 选择你的设备</view>
-          <view class="device-selectors">
+          <view class="device-selectors" catchtap="">
             <view class="device-select-row">
               <text class="device-select-label">相机</text>
-              <picker mode="selector" range="{{cameraPresets}}" range-key="label" bindchange="onSelectCamera">
+              <picker mode="selector" range="{{cameraPresets}}" range-key="label" bindchange="onSelectCamera" catchtap="">
                 <view class="device-select-btn">{{cameraRec ? cameraRec.brand + ' ' + cameraRec.model : '选择相机型号 ▾'}}</view>
               </picker>
+              <view wx:if="{{cameraRec}}" class="device-clear-btn" catchtap="onClearCamera">✕</view>
             </view>
             <view class="device-select-row">
               <text class="device-select-label">手机</text>
-              <picker mode="selector" range="{{phonePresets}}" range-key="label" bindchange="onSelectPhone">
+              <picker mode="selector" range="{{phonePresets}}" range-key="label" bindchange="onSelectPhone" catchtap="">
                 <view class="device-select-btn">{{phoneRec ? phoneRec.brand + ' ' + phoneRec.model : '选择手机型号 ▾'}}</view>
               </picker>
+              <view wx:if="{{phoneRec}}" class="device-clear-btn" catchtap="onClearPhone">✕</view>
             </view>
           </view>
         </view>
@@ -357,6 +359,27 @@
           <view class="device-rec-hero" wx:if="{{phoneRec.altLens}}" style="margin-top:8rpx;">
             <view class="device-rec-lens">辅助：{{phoneRec.altLens.name}}</view>
             <view class="device-rec-note">{{phoneRec.altLens.note}} · {{phoneRec.altLens.bestFor}}</view>
+          </view>
+          <view class="photo-grid" style="margin-top:12rpx;">
+            <view class="photo-param">
+              <view class="photo-param-label">拍摄模式</view>
+              <view class="photo-param-value">{{phoneRec.mode}}</view>
+              <view class="photo-param-note">{{phoneRec.modeNote}}</view>
+            </view>
+          </view>
+          <view class="photo-grid" style="margin-top:8rpx;">
+            <view class="photo-param">
+              <view class="photo-param-label">专业模式 ISO</view>
+              <view class="photo-param-value">{{phoneRec.proSettings.iso}}</view>
+            </view>
+            <view class="photo-param">
+              <view class="photo-param-label">专业模式快门</view>
+              <view class="photo-param-value">{{phoneRec.proSettings.shutter}}</view>
+            </view>
+            <view class="photo-param">
+              <view class="photo-param-label">白平衡</view>
+              <view class="photo-param-value">{{phoneRec.proSettings.wb}}</view>
+            </view>
           </view>
           <view class="photo-device-title" style="font-size:24rpx;margin-top:16rpx;">全部镜头</view>
           <view wx:for="{{phoneRec.allLenses}}" wx:key="name" class="device-lens-item">

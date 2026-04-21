@@ -161,10 +161,18 @@ Page({
 
     let phoneRec = null;
     if (selectedPhone) {
-      phoneRec = presets.getPhoneRecommendation(selectedPhone, score);
+      phoneRec = presets.getPhoneRecommendation(selectedPhone, score, lighting, wind);
     }
 
     this.setData({ cameraRec, phoneRec });
+  },
+
+  onClearCamera() {
+    this.setData({ selectedCamera: '', cameraRec: null });
+  },
+
+  onClearPhone() {
+    this.setData({ selectedPhone: '', phoneRec: null });
   },
 
   onClosePhoto() {

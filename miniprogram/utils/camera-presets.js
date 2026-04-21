@@ -270,19 +270,62 @@ function getCameraRecommendation(presetId, ev, lighting, windSpeed, cloudSeaScor
 /**
  * Get phone recommendation for specific device
  */
-function getPhoneRecommendation(presetId, cloudSeaScore) {
+function getPhoneRecommendation(presetId, cloudSeaScore, lighting, windSpeed) {
   const preset = PHONE_PRESETS[presetId];
   if (!preset) return null;
 
   const hasCloudSea = cloudSeaScore >= 55;
+  const windCalm = (windSpeed ?? 0) <= 5;
+  const isNight = lighting?.phase === 'night';
+  const isBluehour = (lighting?.phase || '').includes('blue-hour');
+  const isGolden = (lighting?.phase || '').includes('golden');
 
   // Pick best lens
   let primaryLens, altLens;
   if (hasCloudSea && preset.lenses.length >= 2) {
-    primaryLens = preset.lenses.find(l => l.focal <= 15) || preset.lenses[0]; // ultra-wide
-    altLens = preset.lenses.find(l => l.focal >= 60); // telephoto for details
+    primaryLens = preset.lenses.find(l => l.focal <= 15) || preset.lenses[0];
+    altLens = preset.lenses.find(l => l.focal >= 60);
   } else {
-    primaryLens = preset.lenses.find(l => l.focal >= 20 && l.focal <= 30) || preset.lenses[0]; // main
+    primaryLens = preset.lenses.find(l => l.focal >= 20 && l.focal <= 30) || preset.lenses[0];
+  }
+
+  // Shooting mode recommendation
+  let mode, modeNote;
+  if (isNight) {
+    mode = '夜景模式';
+    modeNote = '手持稳定 3-5 秒，AI 多帧合成';
+  } else if (hasCloudSea && windCalm) {
+    mode = '专业模式 / 长曝光';
+    modeNote = '设置 1-4 秒快门拍丝绸云海';
+  } else if (isBluehour) {
+    mode = '夜景模式 / 专业模式';
+    modeNote = '蓝调时段需要延长曝光';
+  } else if (isGolden) {
+    mode = 'HDR 模式';
+    modeNote = '保留日出日落高光与暗部细节';
+  } else {
+    mode = '风景模式 / AI拍照';
+    modeNote = 'AI 自动识别场景优化';
+  }
+
+  // Pro mode settings
+  let proISO, proShutter, proWB;
+  if (isNight) {
+    proISO = '800-1600';
+    proShutter = '1/4s - 4s';
+    proWB = '自动';
+  } else if (hasCloudSea && windCalm) {
+    proISO = '50-100';
+    proShutter = '1s - 4s';
+    proWB = isGolden ? '偏暖 (5000K)' : '自动';
+  } else if (isBluehour) {
+    proISO = '200-800';
+    proShutter = '1s - 8s';
+    proWB = '偏冷 (7000K)';
+  } else {
+    proISO = '50-200';
+    proShutter = '自动';
+    proWB = '自动';
   }
 
   return {
@@ -290,6 +333,9 @@ function getPhoneRecommendation(presetId, cloudSeaScore) {
     model: preset.model,
     primaryLens,
     altLens,
+    mode,
+    modeNote,
+    proSettings: { iso: proISO, shutter: proShutter, wb: proWB },
     features: preset.features,
     timelapse: preset.timelapse,
     allLenses: preset.lenses,
