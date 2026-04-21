@@ -15,10 +15,10 @@
 const calc = require('./calculations');
 
 const MODELS = [
-  { id: 'icon_seamless', name: 'ICON', weight: 1.0 },
-  { id: 'gfs_seamless', name: 'GFS', weight: 1.0 },
-  { id: 'jma_seamless', name: 'JMA', weight: 1.2 },
-  { id: 'ecmwf_ifs025', name: 'ECMWF', weight: 1.5 },
+  { id: 'icon_seamless', name: 'ICON（德国）', weight: 1.0 },
+  { id: 'gfs_seamless', name: 'GFS（美国）', weight: 1.0 },
+  { id: 'jma_seamless', name: 'JMA（日本）', weight: 1.2 },
+  { id: 'ecmwf_ifs025', name: 'ECMWF（欧洲）', weight: 1.5 },
 ];
 
 // CMA (GFS-based Chinese model) is available via the standard endpoint

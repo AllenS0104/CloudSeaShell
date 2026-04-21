@@ -151,7 +151,7 @@
         <view class="section-title">多模式融合预测</view>
       </view>
 
-      <view wx:if="{{fusionLoading}}" class="loading-text">正在获取多模式数据（ICON / GFS / JMA / ECMWF）...</view>
+      <view wx:if="{{fusionLoading}}" class="loading-text">正在获取多模式数据（ICON（德国）/ GFS（美国）/ JMA（日本）/ ECMWF（欧洲））...</view>
 
       <view wx:if="{{fusionResult}}">
         <view class="forecast-card">
