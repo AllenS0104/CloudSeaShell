@@ -2,6 +2,7 @@ const calc = require('../../utils/calculations');
 const api = require('../../utils/services');
 const fusion = require('../../utils/fusion');
 const photo = require('../../utils/photography');
+const presets = require('../../utils/camera-presets');
 const sunsetModule = require('../../utils/sunset');
 
 const DEFAULT_ELEVATION = 300;
@@ -35,6 +36,12 @@ Page({
     showPhoto: false,
     glowAnalysis: null,
     safetyAlerts: [],
+    cameraPresets: presets.getAllCameraPresets(),
+    phonePresets: presets.getAllPhonePresets(),
+    selectedCamera: '',
+    selectedPhone: '',
+    cameraRec: null,
+    phoneRec: null,
   },
 
   onLoad() {
@@ -123,6 +130,41 @@ Page({
 
   onOpenPhoto() {
     this.setData({ showPhoto: true });
+    this.updateDeviceRecs();
+  },
+
+  onSelectCamera(e) {
+    const idx = Number(e.detail.value);
+    const id = this.data.cameraPresets[idx]?.id || '';
+    this.setData({ selectedCamera: id });
+    this.updateDeviceRecs();
+  },
+
+  onSelectPhone(e) {
+    const idx = Number(e.detail.value);
+    const id = this.data.phonePresets[idx]?.id || '';
+    this.setData({ selectedPhone: id });
+    this.updateDeviceRecs();
+  },
+
+  updateDeviceRecs() {
+    const { selectedCamera, selectedPhone, photoParams } = this.data;
+    const score = this.data.analysis?.score ?? 0;
+    const wind = parseFloat(this.data.currentWind) || 0;
+    const lighting = photoParams?.lighting || { phase: 'daylight' };
+    const ev = photoParams?.ev || 12;
+
+    let cameraRec = null;
+    if (selectedCamera) {
+      cameraRec = presets.getCameraRecommendation(selectedCamera, ev, lighting, wind, score);
+    }
+
+    let phoneRec = null;
+    if (selectedPhone) {
+      phoneRec = presets.getPhoneRecommendation(selectedPhone, score);
+    }
+
+    this.setData({ cameraRec, phoneRec });
   },
 
   onClosePhoto() {

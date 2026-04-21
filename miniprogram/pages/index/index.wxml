@@ -291,8 +291,86 @@
           </view>
         </view>
 
-        <!-- Camera -->
+        <!-- Device Selector -->
         <view class="photo-section">
+          <view class="photo-device-title">📷 选择你的设备</view>
+          <view class="device-selectors">
+            <view class="device-select-row">
+              <text class="device-select-label">相机</text>
+              <picker mode="selector" range="{{cameraPresets}}" range-key="label" bindchange="onSelectCamera">
+                <view class="device-select-btn">{{cameraRec ? cameraRec.brand + ' ' + cameraRec.model : '选择相机型号 ▾'}}</view>
+              </picker>
+            </view>
+            <view class="device-select-row">
+              <text class="device-select-label">手机</text>
+              <picker mode="selector" range="{{phonePresets}}" range-key="label" bindchange="onSelectPhone">
+                <view class="device-select-btn">{{phoneRec ? phoneRec.brand + ' ' + phoneRec.model : '选择手机型号 ▾'}}</view>
+              </picker>
+            </view>
+          </view>
+        </view>
+
+        <!-- Device-specific Camera Rec -->
+        <view class="photo-section" wx:if="{{cameraRec}}">
+          <view class="photo-device-title">📷 {{cameraRec.brand}} {{cameraRec.model}} 推荐设置</view>
+          <view class="device-rec-hero">
+            <view class="device-rec-lens">{{cameraRec.lens}}</view>
+            <view class="device-rec-note">{{cameraRec.lensNote}}</view>
+          </view>
+          <view class="photo-grid">
+            <view class="photo-param">
+              <view class="photo-param-label">光圈</view>
+              <view class="photo-param-value">{{cameraRec.aperture}}</view>
+            </view>
+            <view class="photo-param">
+              <view class="photo-param-label">快门</view>
+              <view class="photo-param-value">{{cameraRec.shutter}}</view>
+            </view>
+            <view class="photo-param">
+              <view class="photo-param-label">感光度</view>
+              <view class="photo-param-value">{{cameraRec.iso}}</view>
+            </view>
+          </view>
+          <view wx:if="{{cameraRec.altLens}}" class="device-alt-lens">
+            <text class="photo-param-label">备选镜头：</text>
+            <text class="photo-param-value">{{cameraRec.altLens.name}}</text>
+            <text class="photo-param-note"> — {{cameraRec.altLens.note}}</text>
+          </view>
+          <view class="photo-device-title" style="font-size:24rpx;margin-top:16rpx;">全部镜头</view>
+          <view wx:for="{{cameraRec.allLenses}}" wx:key="name" class="device-lens-item">
+            <text class="device-lens-name">{{item.name}}</text>
+            <text class="device-lens-aperture">{{item.bestAperture}}</text>
+            <text class="device-lens-note">{{item.note}}</text>
+          </view>
+          <view class="forecast-reasons" style="margin-top:12rpx;">
+            <view wx:for="{{cameraRec.tips}}" wx:key="index" class="reason-item">{{item}}</view>
+          </view>
+        </view>
+
+        <!-- Device-specific Phone Rec -->
+        <view class="photo-section" wx:if="{{phoneRec}}">
+          <view class="photo-device-title">📱 {{phoneRec.brand}} {{phoneRec.model}} 推荐</view>
+          <view class="device-rec-hero" wx:if="{{phoneRec.primaryLens}}">
+            <view class="device-rec-lens">首选：{{phoneRec.primaryLens.name}}</view>
+            <view class="device-rec-note">{{phoneRec.primaryLens.note}} · 最佳用于{{phoneRec.primaryLens.bestFor}}</view>
+          </view>
+          <view class="device-rec-hero" wx:if="{{phoneRec.altLens}}" style="margin-top:8rpx;">
+            <view class="device-rec-lens">辅助：{{phoneRec.altLens.name}}</view>
+            <view class="device-rec-note">{{phoneRec.altLens.note}} · {{phoneRec.altLens.bestFor}}</view>
+          </view>
+          <view class="photo-device-title" style="font-size:24rpx;margin-top:16rpx;">全部镜头</view>
+          <view wx:for="{{phoneRec.allLenses}}" wx:key="name" class="device-lens-item">
+            <text class="device-lens-name">{{item.name}}</text>
+            <text class="device-lens-note">{{item.note}} · {{item.bestFor}}</text>
+          </view>
+          <view class="forecast-reasons" style="margin-top:12rpx;">
+            <view wx:for="{{phoneRec.features}}" wx:key="index" class="reason-item">{{item}}</view>
+          </view>
+          <view class="photo-param-note" style="margin-top:8rpx;">延时：{{phoneRec.timelapse}}</view>
+        </view>
+
+        <!-- Generic Camera (when no device selected) -->
+        <view class="photo-section" wx:if="{{!cameraRec}}">
           <view class="photo-device-title">🎞️ 单反 / 微单推荐</view>
           <view class="photo-grid">
             <view class="photo-param">
@@ -366,8 +444,8 @@
           </view>
         </view>
 
-        <!-- Phone -->
-        <view class="photo-section">
+        <!-- Phone (generic, when no device selected) -->
+        <view class="photo-section" wx:if="{{!phoneRec}}">
           <view class="photo-device-title">📱 手机拍摄</view>
           <view class="photo-grid">
             <view class="photo-param">
