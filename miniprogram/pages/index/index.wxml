@@ -144,6 +144,83 @@
       </view>
     </view>
 
+    <!-- Photography Parameters -->
+    <view class="card" wx:if="{{photoParams}}">
+      <view class="section-heading">
+        <view class="section-eyebrow">PHOTOGRAPHY GUIDE</view>
+        <view class="section-title">📸 摄影参数推荐</view>
+      </view>
+
+      <view class="photo-summary">{{photoParams.lighting.icon}} {{photoParams.summary}}</view>
+
+      <!-- Camera (DSLR/Mirrorless) -->
+      <view class="photo-device-title">🎞️ 单反 / 微单</view>
+      <view class="photo-grid">
+        <view class="photo-param">
+          <view class="photo-param-label">光圈</view>
+          <view class="photo-param-value">{{photoParams.camera.aperture}}</view>
+          <view class="photo-param-note">{{photoParams.camera.apertureNote}}</view>
+        </view>
+        <view class="photo-param">
+          <view class="photo-param-label">快门</view>
+          <view class="photo-param-value">{{photoParams.camera.shutter}}</view>
+          <view class="photo-param-note">{{photoParams.camera.shutterNote}}</view>
+        </view>
+        <view class="photo-param">
+          <view class="photo-param-label">ISO</view>
+          <view class="photo-param-value">{{photoParams.camera.iso}}</view>
+          <view class="photo-param-note">{{photoParams.camera.isoNote}}</view>
+        </view>
+        <view class="photo-param">
+          <view class="photo-param-label">白平衡</view>
+          <view class="photo-param-value">{{photoParams.camera.wb}}</view>
+          <view class="photo-param-note">{{photoParams.camera.wbNote}}</view>
+        </view>
+        <view class="photo-param" style="min-width:100%;">
+          <view class="photo-param-label">焦段建议</view>
+          <view class="photo-param-value">{{photoParams.camera.focal}}</view>
+          <view class="photo-param-note">{{photoParams.camera.focalNote}}</view>
+        </view>
+      </view>
+
+      <!-- Filters -->
+      <view wx:if="{{photoParams.filters.length}}" style="margin-top:20rpx;">
+        <view class="photo-device-title">🔘 滤镜建议</view>
+        <view wx:for="{{photoParams.filters}}" wx:key="name" class="filter-item">
+          <text class="filter-dot filter-{{item.priority}}">●</text>
+          <text class="filter-name">{{item.name}}</text>
+          <text class="filter-reason">{{item.reason}}</text>
+        </view>
+      </view>
+
+      <!-- Phone -->
+      <view style="margin-top:20rpx;">
+        <view class="photo-device-title">📱 手机拍摄</view>
+        <view class="photo-grid">
+          <view class="photo-param">
+            <view class="photo-param-label">拍摄模式</view>
+            <view class="photo-param-value">{{photoParams.phone.mode}}</view>
+            <view class="photo-param-note">{{photoParams.phone.modeNote}}</view>
+          </view>
+          <view class="photo-param">
+            <view class="photo-param-label">镜头选择</view>
+            <view class="photo-param-value">{{photoParams.phone.lens}}</view>
+          </view>
+        </view>
+        <view class="forecast-reasons" style="margin-top:8rpx;">
+          <view wx:for="{{photoParams.phone.tips}}" wx:key="index" class="reason-item">{{item}}</view>
+        </view>
+      </view>
+
+      <!-- Composition -->
+      <view wx:if="{{photoParams.composition.length}}" style="margin-top:20rpx;">
+        <view class="photo-device-title">🎨 构图建议</view>
+        <view class="forecast-reasons">
+          <view wx:for="{{photoParams.composition}}" wx:key="index" class="reason-item">{{item}}</view>
+        </view>
+      </view>
+    </view>
+
     <!-- Multi-Model Fusion -->
     <view class="card" wx:if="{{fusionResult || fusionLoading}}">
       <view class="section-heading">

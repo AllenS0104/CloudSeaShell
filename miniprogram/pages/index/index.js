@@ -1,6 +1,7 @@
 const calc = require('../../utils/calculations');
 const api = require('../../utils/services');
 const fusion = require('../../utils/fusion');
+const photo = require('../../utils/photography');
 
 const DEFAULT_ELEVATION = 300;
 
@@ -29,6 +30,7 @@ Page({
     markers: [],
     fusionResult: null,
     fusionLoading: false,
+    photoParams: null,
   },
 
   onLoad() {
@@ -229,6 +231,22 @@ Page({
       currentDewGap: currentDewGap.toFixed(1),
       hourlyList,
     });
+
+    // Generate photography recommendations
+    const bestHourTime = dayAnalysis.bestHour?.timeLabel
+      ? hourly.time.slice(start, start + 24).find(t => t.includes(dayAnalysis.bestHour.timeLabel?.replace(':', ''))) || hourly.time[start]
+      : hourly.time[start];
+    const photoParams = photo.generatePhotoRecommendations({
+      timeString: current?.time || bestHourTime,
+      sunriseTime: sunrise,
+      sunsetTime: sunset,
+      cloudCover: analysis.cloudCover,
+      visibility: analysis.visibility,
+      windSpeed: analysis.windSpeed,
+      cloudSeaScore: analysis.score,
+      elevation,
+    });
+    this.setData({ photoParams });
   },
 
   async fetchFusion(lat, lon) {
