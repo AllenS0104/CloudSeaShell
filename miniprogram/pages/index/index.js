@@ -38,7 +38,23 @@ Page({
   },
 
   onLoad() {
-    this.fetchAll(this.data.lat, this.data.lon);
+    // Auto-locate on startup
+    this.autoLocate();
+  },
+
+  async autoLocate() {
+    try {
+      const pos = await api.getLocation();
+      this.setData({
+        lat: pos.latitude,
+        lon: pos.longitude,
+        locationName: '当前位置',
+      });
+      this.fetchAll(pos.latitude, pos.longitude);
+    } catch (err) {
+      console.warn('自动定位失败，使用默认位置', err.message);
+      this.fetchAll(this.data.lat, this.data.lon);
+    }
   },
 
   onShareAppMessage() {
@@ -61,13 +77,29 @@ Page({
     this.setData({ statusText: `正在搜索 ${address}...`, statusType: 'info', loading: true });
 
     try {
-      const result = await api.geocodeAddress(address);
-      this.setData({
-        lat: result.latitude,
-        lon: result.longitude,
-        locationName: result.name,
-      });
-      await this.fetchAll(result.latitude, result.longitude);
+      const results = await api.geocodeAddress(address);
+
+      if (results.length === 1) {
+        // Single result: use directly
+        const r = results[0];
+        this.setData({ lat: r.latitude, lon: r.longitude, locationName: r.name });
+        await this.fetchAll(r.latitude, r.longitude);
+      } else {
+        // Multiple results: let user pick
+        const names = results.map(r => r.name);
+        const that = this;
+        wx.showActionSheet({
+          itemList: names.slice(0, 6),
+          success(res) {
+            const picked = results[res.tapIndex];
+            that.setData({ lat: picked.latitude, lon: picked.longitude, locationName: picked.name });
+            that.fetchAll(picked.latitude, picked.longitude);
+          },
+          fail() {
+            that.setData({ loading: false, statusText: '已取消选择', statusType: 'info' });
+          },
+        });
+      }
     } catch (err) {
       this.setData({ statusText: `搜索失败：${err.message}`, statusType: 'warning', loading: false });
     }

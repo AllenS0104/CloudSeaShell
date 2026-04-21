@@ -127,22 +127,38 @@ async function fetchElevation(lat, lon) {
 }
 
 async function geocodeAddress(address) {
+  // Clean up search term: extract key place name
+  const cleanAddress = address
+    .replace(/[省市区县镇乡村路街道号楼栋单元室]+$/g, '')
+    .replace(/[,，。.!！?？]/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .slice(0, 3)
+    .join(' ');
+
+  const searchTerm = cleanAddress || address;
+
   const data = await wxRequest(
-    `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(address)}&count=5&language=zh&format=json`,
+    `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(searchTerm)}&count=10&language=zh&format=json`,
     { timeoutMs: 8000, retries: 1 },
   );
 
   const results = data?.results;
   if (!Array.isArray(results) || results.length === 0) {
-    throw new Error('未找到该地址，请尝试更简单的关键词');
+    // Retry with first 2 characters (often the core place name in Chinese)
+    if (searchTerm.length > 2) {
+      return geocodeAddress(searchTerm.slice(0, 2));
+    }
+    throw new Error('未找到该地址，请尝试更简短的地名（如"黄山"）');
   }
 
-  const item = results[0];
-  return {
+  // Return all results for user to pick
+  return results.map(item => ({
     latitude: item.latitude,
     longitude: item.longitude,
     name: [item.name, item.admin1, item.country].filter(Boolean).join(', '),
-  };
+    elevation: item.elevation,
+  }));
 }
 
 function getLocation() {
