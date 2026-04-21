@@ -5,87 +5,87 @@ function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
-export function cloudBaseFromHumidity(_temperature, humidity) {
+export function cloudBaseFromHumidity(temperature, humidity) {
+  const safeTemperature = Number.isFinite(temperature) ? temperature : 0;
   const safeHumidity = Number.isFinite(humidity) ? humidity : 0;
-  return Math.round(((100 - safeHumidity) / 5) * 125);
+  const safeDewPoint = safeTemperature - ((100 - safeHumidity) / 5);
+  return Math.round(Math.max(0, 125 * (safeTemperature - safeDewPoint)));
+}
+
+export function cloudBaseFromDewPoint(temperature, dewPoint) {
+  const safeT = Number.isFinite(temperature) ? temperature : 0;
+  const safeTd = Number.isFinite(dewPoint) ? dewPoint : 0;
+  return Math.round(Math.max(0, 125 * (safeT - safeTd)));
+}
+
+function lerp(value, inLow, inHigh, outLow, outHigh) {
+  const t = clamp((value - inLow) / (inHigh - inLow), 0, 1);
+  return outLow + t * (outHigh - outLow);
 }
 
 function scoreHumidity(humidity) {
-  const safeHumidity = Number(humidity ?? 0);
-  if (safeHumidity >= 97) return 26;
-  if (safeHumidity >= 93) return 22;
-  if (safeHumidity >= 88) return 18;
-  if (safeHumidity >= 82) return 12;
-  if (safeHumidity >= 75) return 6;
+  const v = Number(humidity ?? 0);
+  if (v >= 97) return 25;
+  if (v >= 75) return Math.round(lerp(v, 75, 97, 0, 25));
   return 0;
 }
 
 function scoreElevationGap(gapToElevation) {
-  if (gapToElevation >= 300) return 28;
-  if (gapToElevation >= 150) return 24;
-  if (gapToElevation >= 50) return 18;
-  if (gapToElevation >= -100) return 10;
+  if (gapToElevation >= 300) return 25;
+  if (gapToElevation >= -100) return Math.round(lerp(gapToElevation, -100, 300, 0, 25));
   return 0;
 }
 
 function scoreVisibility(visibility) {
-  const safeVisibility = Number(visibility ?? 0);
-  if (safeVisibility >= 12000) return 18;
-  if (safeVisibility >= 8000) return 14;
-  if (safeVisibility >= 5000) return 8;
-  if (safeVisibility >= 2000) return 4;
+  const v = Number(visibility ?? 0);
+  if (v >= 12000) return 15;
+  if (v >= 2000) return Math.round(lerp(v, 2000, 12000, 2, 15));
   return 0;
 }
 
 function scoreWind(windSpeed) {
-  const safeWindSpeed = Number(windSpeed ?? 0);
-  if (safeWindSpeed <= 3) return 12;
-  if (safeWindSpeed <= 6) return 10;
-  if (safeWindSpeed <= 9) return 6;
-  if (safeWindSpeed <= 12) return 2;
+  const v = Number(windSpeed ?? 0);
+  if (v <= 3) return 10;
+  if (v <= 12) return Math.round(lerp(v, 3, 12, 10, 0));
   return 0;
 }
 
 function scoreCloudCover(cloudCover) {
-  const safeCloudCover = Number(cloudCover ?? 0);
-  if (safeCloudCover >= 40 && safeCloudCover <= 95) return 10;
-  if (safeCloudCover >= 20 && safeCloudCover < 40) return 6;
-  if (safeCloudCover > 95) return 5;
+  const v = Number(cloudCover ?? 0);
+  if (v >= 40 && v <= 95) return 8;
+  if (v >= 20 && v < 40) return Math.round(lerp(v, 20, 40, 2, 8));
+  if (v > 95) return Math.round(lerp(v, 95, 100, 8, 4));
   return 0;
 }
 
 function scoreLowCloudCover(lowCloudCover) {
-  const safeLowCloudCover = Number(lowCloudCover ?? 0);
-  if (safeLowCloudCover >= 45 && safeLowCloudCover <= 95) return 14;
-  if (safeLowCloudCover >= 25 && safeLowCloudCover < 45) return 9;
-  if (safeLowCloudCover > 95) return 6;
+  const v = Number(lowCloudCover ?? 0);
+  if (v >= 45 && v <= 95) return 12;
+  if (v >= 25 && v < 45) return Math.round(lerp(v, 25, 45, 4, 12));
+  if (v > 95) return Math.round(lerp(v, 95, 100, 12, 5));
   return 0;
 }
 
 function scoreDewPointSpread(temperature, dewPoint) {
   const spread = Number(temperature ?? 0) - Number(dewPoint ?? 0);
-  if (spread <= 1.5) return 14;
-  if (spread <= 3) return 10;
-  if (spread <= 5) return 6;
-  if (spread <= 7) return 3;
+  if (spread <= 1.5) return 12;
+  if (spread <= 7) return Math.round(lerp(spread, 1.5, 7, 12, 0));
   return 0;
 }
 
 function scorePressure(pressureMsl) {
-  const safePressure = Number(pressureMsl ?? 0);
-  if (safePressure >= 1016) return 6;
-  if (safePressure >= 1010) return 4;
-  if (safePressure >= 1004) return 2;
+  const v = Number(pressureMsl ?? 0);
+  if (v >= 1016) return 5;
+  if (v >= 1004) return Math.round(lerp(v, 1004, 1016, 0, 5));
   return 0;
 }
 
 function precipitationPenalty(precipitationProbability, precipitationAmount) {
-  const safeProbability = Number(precipitationProbability ?? 0);
-  const safeAmount = Number(precipitationAmount ?? 0);
-  if (safeAmount >= 2 || safeProbability >= 80) return 14;
-  if (safeAmount >= 0.8 || safeProbability >= 60) return 9;
-  if (safeAmount >= 0.2 || safeProbability >= 40) return 4;
-  return 0;
+  const prob = Number(precipitationProbability ?? 0);
+  const amt = Number(precipitationAmount ?? 0);
+  const probPenalty = prob >= 80 ? 10 : (prob >= 30 ? Math.round(lerp(prob, 30, 80, 0, 10)) : 0);
+  const amtPenalty = amt >= 2 ? 10 : (amt >= 0.1 ? Math.round(lerp(amt, 0.1, 2, 0, 10)) : 0);
+  return Math.min(15, Math.max(probPenalty, amtPenalty));
 }
 
 function scoreTimeWindow(timeString, sunriseTime) {
@@ -101,12 +101,30 @@ function scoreTimeWindow(timeString, sunriseTime) {
   if (sunriseTime) {
     const sunrise = new Date(sunriseTime);
     const diffHours = Math.abs(time.getTime() - sunrise.getTime()) / (1000 * 60 * 60);
-    if (diffHours <= 2) return 6;
-    if (diffHours <= 4) return 4;
+    if (diffHours <= 1.5) return 10;
+    if (diffHours <= 4) return Math.round(lerp(diffHours, 1.5, 4, 10, 2));
   }
 
   const hour = time.getHours();
-  return hour >= 4 && hour <= 9 ? 2 : 0;
+  return hour >= 4 && hour <= 9 ? 3 : 0;
+}
+
+export function scoreInversion(temperatures) {
+  if (!Array.isArray(temperatures) || temperatures.length < 3) {
+    return { score: 0, detected: false, strength: 0 };
+  }
+
+  let maxInversion = 0;
+  for (let i = 1; i < temperatures.length; i += 1) {
+    const diff = temperatures[i] - temperatures[i - 1];
+    if (diff > 0) {
+      maxInversion = Math.max(maxInversion, diff);
+    }
+  }
+
+  if (maxInversion >= 3) return { score: 8, detected: true, strength: maxInversion };
+  if (maxInversion >= 1) return { score: Math.round(lerp(maxInversion, 1, 3, 2, 8)), detected: true, strength: maxInversion };
+  return { score: 0, detected: false, strength: 0 };
 }
 
 export function scoreToConfidence(score) {
@@ -246,8 +264,14 @@ function buildReasons({
   precipitationProbability,
   precipitationAmount,
   timeScore,
+  inversionDetected,
+  inversionStrength,
 }) {
   const reasons = [];
+
+  if (inversionDetected) {
+    reasons.push(`检测到逆温层（温差 ${inversionStrength.toFixed(1)}°C），有利于低云/雾层稳定维持。`);
+  }
 
   if (gapToElevation >= 50) {
     reasons.push(`观测点比估算云底高约 ${Math.round(gapToElevation)} 米，具备俯看云层条件。`);
@@ -293,11 +317,11 @@ function buildReasons({
     reasons.push('降水信号偏强，虽然水汽充足，但观测体验和稳定性可能受影响。');
   }
 
-  if (timeScore >= 4) {
+  if (timeScore >= 5) {
     reasons.push('时段接近日出窗口，更符合常见云海出现条件。');
   }
 
-  return reasons.slice(0, 4);
+  return reasons.slice(0, 5);
 }
 
 export function analyzeCloudSeaSample({
@@ -314,6 +338,7 @@ export function analyzeCloudSeaSample({
   elevation,
   timeString,
   sunriseTime,
+  inversionScore = 0,
 }) {
   const safeTemperature = Number(temperature ?? 0);
   const safeHumidity = Number(humidity ?? 0);
@@ -326,7 +351,9 @@ export function analyzeCloudSeaSample({
   const safePrecipitationProbability = Number(precipitationProbability ?? 0);
   const safePrecipitationAmount = Number(precipitationAmount ?? 0);
   const dewPointGap = dewPointSpread(safeTemperature, safeDewPoint);
-  const cloudBase = cloudBaseFromHumidity(safeTemperature, safeHumidity);
+  const cloudBase = safeDewPoint !== 0
+    ? cloudBaseFromDewPoint(safeTemperature, safeDewPoint)
+    : cloudBaseFromHumidity(safeTemperature, safeHumidity);
   const gapToElevation = elevation - cloudBase;
   const timeScore = scoreTimeWindow(timeString, sunriseTime);
   const penalty = precipitationPenalty(safePrecipitationProbability, safePrecipitationAmount);
@@ -340,7 +367,8 @@ export function analyzeCloudSeaSample({
       scoreLowCloudCover(safeLowCloudCover) +
       scoreDewPointSpread(safeTemperature, safeDewPoint) +
       scorePressure(safePressureMsl) +
-      timeScore,
+      timeScore +
+      inversionScore,
     0,
     100,
   );
@@ -451,6 +479,7 @@ export function analyzeDayCloudSea(hourly, start, elevation) {
     const hour = new Date(timeString).getHours();
     return hour >= 5 && hour <= 7;
   }) ?? timeSeries[0];
+  const inversion = scoreInversion(temperatures);
   const hourlyAnalyses = temperatures.map((temperature, index) => analyzeCloudSeaSample({
     temperature,
     humidity: humidities[index],
@@ -465,6 +494,7 @@ export function analyzeDayCloudSea(hourly, start, elevation) {
     elevation,
     timeString: timeSeries[index],
     sunriseTime,
+    inversionScore: inversion.score,
   }));
   const cloudBases = hourlyAnalyses.map((analysis) => analysis.cloudBase);
   const bestHour = hourlyAnalyses.reduce((best, current, index) => {
@@ -489,6 +519,7 @@ export function analyzeDayCloudSea(hourly, start, elevation) {
     precipitationProbabilities,
     precipitationAmounts,
     cloudBases,
+    inversion,
     hourlyAnalyses,
     bestHour,
     score: bestHour?.score ?? 0,

@@ -521,6 +521,17 @@ select option {
   margin-top: 4px;
 }
 
+.forecast-disclaimer {
+  margin-top: 10px;
+  padding: 8px 12px;
+  font-size: 0.78rem;
+  color: var(--text-muted-color);
+  background: rgba(240, 173, 78, 0.08);
+  border-left: 3px solid var(--warning-color);
+  border-radius: 6px;
+  line-height: 1.5;
+}
+
 .guidance-card {
   margin-top: 16px;
   padding: 18px;

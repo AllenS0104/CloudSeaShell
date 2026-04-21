@@ -24,5 +24,12 @@ module.exports = {
         es2021: true,
       },
     },
+    {
+      files: ['__tests__/calculations.test.js'],
+      rules: {
+        'no-new-func': 'off',
+        'no-unused-vars': 'off',
+      },
+    },
   ],
 };

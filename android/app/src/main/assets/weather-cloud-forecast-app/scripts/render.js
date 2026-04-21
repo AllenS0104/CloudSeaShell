@@ -190,6 +190,10 @@ function createForecastDetails(analysis, bestTimeLabel) {
         className: 'forecast-reasons',
         children: analysis.reasons.map((reason) => createElement('li', { text: reason })),
       }),
+      createElement('div', {
+        className: 'forecast-disclaimer',
+        text: '⚠️ 预测仅供参考，基于数值天气模式估算，实际云海受微地形、局地气流等因素影响，请结合现场条件判断。',
+      }),
     ],
   });
 }
