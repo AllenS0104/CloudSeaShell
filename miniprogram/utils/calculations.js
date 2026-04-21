@@ -1,5 +1,6 @@
-const DAY_BACKGROUND = 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1950&q=80';
-const NIGHT_BACKGROUND = 'https://images.unsplash.com/photo-1503264116251-35a269479413?auto=format&fit=crop&w=1950&q=80';
+// Background images not used in Mini Program (bundled locally if needed)
+const DAY_BACKGROUND = '';
+const NIGHT_BACKGROUND = '';
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);

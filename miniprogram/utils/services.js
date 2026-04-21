@@ -1,6 +1,7 @@
 /**
  * API service layer for WeChat Mini Program
- * Adapts web fetch calls to wx.request
+ * All APIs use Open-Meteo (free, no key required, works in China)
+ * Includes retry, timeout, and local cache for resilience
  */
 
 const WEATHER_ENDPOINTS = [
@@ -8,32 +9,68 @@ const WEATHER_ENDPOINTS = [
   'https://ensemble-api.open-meteo.com',
 ];
 
-const ELEVATION_ENDPOINTS = [
-  'https://api.open-meteo.com/v1/elevation',
-  'https://api.open-elevation.com/api/v1/lookup',
-];
+const CACHE_KEY_PREFIX = 'cloudsea_cache_';
+const WEATHER_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 
 function wxRequest(url, options = {}) {
-  const { timeoutMs = 10000 } = options;
-  return new Promise((resolve, reject) => {
-    wx.request({
-      url,
-      timeout: timeoutMs,
-      success(res) {
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          resolve(res.data);
-        } else {
-          reject(new Error(`HTTP ${res.statusCode}`));
-        }
-      },
-      fail(err) {
-        reject(new Error(err.errMsg || '网络请求失败'));
-      },
+  const { timeoutMs = 8000, retries = 1 } = options;
+
+  function attempt(retriesLeft) {
+    return new Promise((resolve, reject) => {
+      wx.request({
+        url,
+        timeout: timeoutMs,
+        success(res) {
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            resolve(res.data);
+          } else {
+            reject(new Error(`HTTP ${res.statusCode}`));
+          }
+        },
+        fail(err) {
+          if (retriesLeft > 0) {
+            console.warn(`请求失败，重试中... (${retriesLeft})`, url);
+            setTimeout(() => {
+              attempt(retriesLeft - 1).then(resolve, reject);
+            }, 1000);
+          } else {
+            reject(new Error(err.errMsg || '网络请求失败'));
+          }
+        },
+      });
     });
-  });
+  }
+
+  return attempt(retries);
+}
+
+function getCachedData(key) {
+  try {
+    const raw = wx.getStorageSync(CACHE_KEY_PREFIX + key);
+    if (raw && raw.expireAt > Date.now()) {
+      return raw.data;
+    }
+  } catch (e) { /* ignore */ }
+  return null;
+}
+
+function setCachedData(key, data, ttl) {
+  try {
+    wx.setStorageSync(CACHE_KEY_PREFIX + key, {
+      data,
+      expireAt: Date.now() + ttl,
+    });
+  } catch (e) { /* ignore */ }
 }
 
 async function fetchWeather(lat, lon) {
+  const cacheKey = `weather_${lat.toFixed(2)}_${lon.toFixed(2)}`;
+  const cached = getCachedData(cacheKey);
+  if (cached) {
+    console.log('使用缓存天气数据');
+    return { data: cached, sourceIndex: -1, fromCache: true };
+  }
+
   let lastError = null;
 
   for (let i = 0; i < WEATHER_ENDPOINTS.length; i++) {
@@ -48,63 +85,56 @@ async function fetchWeather(lat, lon) {
         'model=icon_seamless,gfs_seamless',
       ].join('&');
 
-      const data = await wxRequest(`${WEATHER_ENDPOINTS[i]}/v1/forecast?${params}`, { timeoutMs: 12000 });
+      const data = await wxRequest(`${WEATHER_ENDPOINTS[i]}/v1/forecast?${params}`, {
+        timeoutMs: 15000,
+        retries: 1,
+      });
 
       if (!data?.hourly?.time?.length) {
         throw new Error('天气数据格式无效');
       }
 
-      return { data, sourceIndex: i };
+      setCachedData(cacheKey, data, WEATHER_CACHE_TTL);
+      return { data, sourceIndex: i, fromCache: false };
     } catch (err) {
       lastError = err;
     }
   }
 
-  throw new Error(`所有天气源均请求失败：${lastError?.message || '未知错误'}`);
+  throw new Error(`天气数据请求失败：${lastError?.message || '网络超时，请稍后重试'}`);
 }
 
 async function fetchElevation(lat, lon) {
-  // Try Open-Meteo elevation first (faster, more reliable in China)
+  const cacheKey = `elev_${lat.toFixed(2)}_${lon.toFixed(2)}`;
+  const cached = getCachedData(cacheKey);
+  if (cached !== null) return cached;
+
   try {
     const data = await wxRequest(
-      `${ELEVATION_ENDPOINTS[0]}?latitude=${lat}&longitude=${lon}`,
-      { timeoutMs: 5000 },
+      `https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lon}`,
+      { timeoutMs: 6000, retries: 1 },
     );
     const value = data?.elevation?.[0] ?? data?.elevation;
     if (typeof value === 'number' && isFinite(value)) {
+      setCachedData(cacheKey, value, 24 * 60 * 60 * 1000); // cache 24h
       return value;
     }
   } catch (err) {
-    console.warn('Open-Meteo elevation failed, trying fallback', err.message);
+    console.warn('海拔获取失败，使用默认值', err.message);
   }
 
-  // Fallback to Open-Elevation
-  try {
-    const data = await wxRequest(
-      `${ELEVATION_ENDPOINTS[1]}?locations=${lat},${lon}`,
-      { timeoutMs: 5000 },
-    );
-    const value = data?.results?.[0]?.elevation;
-    if (typeof value === 'number' && isFinite(value)) {
-      return value;
-    }
-  } catch (err) {
-    console.warn('Open-Elevation also failed', err.message);
-  }
-
-  // Return default if all fail
   return 300;
 }
 
 async function geocodeAddress(address) {
   const data = await wxRequest(
-    `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(address)}&count=1&language=zh&format=json`,
-    { timeoutMs: 10000 },
+    `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(address)}&count=5&language=zh&format=json`,
+    { timeoutMs: 8000, retries: 1 },
   );
 
   const results = data?.results;
   if (!Array.isArray(results) || results.length === 0) {
-    throw new Error('未找到该地址');
+    throw new Error('未找到该地址，请尝试更简单的关键词');
   }
 
   const item = results[0];
@@ -123,7 +153,7 @@ function getLocation() {
         resolve({ latitude: res.latitude, longitude: res.longitude });
       },
       fail(err) {
-        reject(new Error(err.errMsg || '定位失败'));
+        reject(new Error(err.errMsg || '定位失败，请在设置中允许位置权限'));
       },
     });
   });

@@ -116,17 +116,13 @@ Page({
   },
 
   async fetchAll(lat, lon) {
-    this.setData({ loading: true, statusText: '正在获取天气数据...', statusType: 'info' });
+    this.setData({ loading: true, statusText: '正在获取海拔数据...', statusType: 'info' });
 
     try {
-      let elevation = DEFAULT_ELEVATION;
-      try {
-        elevation = await api.fetchElevation(lat, lon);
-      } catch (err) {
-        console.warn('海拔获取失败，使用默认值', err);
-      }
+      const elevation = await api.fetchElevation(lat, lon);
+      this.setData({ elevation, statusText: '正在获取天气数据...', statusType: 'info' });
 
-      const { data: weatherData } = await api.fetchWeather(lat, lon);
+      const { data: weatherData, fromCache } = await api.fetchWeather(lat, lon);
 
       const daySet = new Set(weatherData.hourly.time.map(t => t.split('T')[0]));
       const dayLabels = Array.from(daySet).map((date, i) => {
@@ -140,7 +136,7 @@ Page({
         weatherData,
         dayLabels,
         markers: [{ id: 0, latitude: lat, longitude: lon, width: 28, height: 36 }],
-        statusText: '天气数据已更新',
+        statusText: fromCache ? '使用缓存数据（点击刷新获取最新）' : '天气数据已更新',
         statusType: 'success',
       });
 
