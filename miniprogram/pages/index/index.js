@@ -3,6 +3,7 @@ const api = require('../../utils/services');
 const fusion = require('../../utils/fusion');
 const photo = require('../../utils/photography');
 const presets = require('../../utils/camera-presets');
+const stars = require('../../utils/stargazing');
 const sunsetModule = require('../../utils/sunset');
 
 const DEFAULT_ELEVATION = 300;
@@ -42,6 +43,7 @@ Page({
     selectedPhone: '',
     cameraRec: null,
     phoneRec: null,
+    starInfo: null,
   },
 
   onLoad() {
@@ -377,6 +379,31 @@ Page({
     }
 
     this.setData({ safetyAlerts: alerts });
+
+    // Stargazing analysis
+    const starInfo = stars.scoreStargazing({
+      date: current?.time || hourly.time[start],
+      latitude: this.data.lat,
+      cloudCover: analysis.cloudCover,
+      visibility: analysis.visibility,
+      humidity: analysis.humidity,
+      elevation,
+    });
+    const astroParams = stars.getAstroParams(starInfo.score, 24, 1);
+    this.setData({
+      starInfo: {
+        score: starInfo.score,
+        level: starInfo.level,
+        label: starInfo.label,
+        resultText: starInfo.resultText,
+        moonPhase: starInfo.moonPhase,
+        moonIllum: starInfo.moonIllum,
+        moonNote: starInfo.moonNote,
+        milkyWay: starInfo.milkyWay,
+        reasons: starInfo.reasons,
+        astro: astroParams,
+      },
+    });
   },
 
   async fetchFusion(lat, lon) {

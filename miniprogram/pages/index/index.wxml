@@ -123,6 +123,80 @@
       <view class="disclaimer">🌅 晚霞预测基于中高层云量、低云遮挡、湿度和能见度综合评估。最佳观赏窗口为日落前 30 分钟至日落后 15 分钟。</view>
     </view>
 
+    <!-- Stargazing / Milky Way -->
+    <view class="card" wx:if="{{starInfo}}">
+      <view class="section-heading">
+        <view class="section-eyebrow">STARGAZING FORECAST</view>
+        <view class="section-title">🌌 银河 / 星空预测</view>
+      </view>
+
+      <view class="forecast-card">
+        <view class="forecast-result {{starInfo.score >= 50 ? 'forecast-positive' : 'forecast-negative'}}" style="{{starInfo.score >= 70 ? 'color:#b388ff;background:rgba(179,136,255,0.18);' : ''}}">
+          {{starInfo.resultText}}
+        </view>
+      </view>
+
+      <view class="stats-grid" style="margin-top:16rpx;">
+        <view class="stat-card">
+          <text class="stat-icon">{{starInfo.moonPhase.icon}}</text>
+          <view><view class="stat-label">月相</view><view class="stat-value">{{starInfo.moonPhase.name}}</view></view>
+        </view>
+        <view class="stat-card">
+          <text class="stat-icon">🔦</text>
+          <view><view class="stat-label">月面亮度</view><view class="stat-value">{{starInfo.moonIllum}}%</view></view>
+        </view>
+        <view class="stat-card">
+          <text class="stat-icon">🌌</text>
+          <view><view class="stat-label">银河核心</view><view class="stat-value">{{starInfo.milkyWay.coreVisible ? '可见' : '不可见'}}</view></view>
+        </view>
+        <view class="stat-card" wx:if="{{starInfo.milkyWay.coreVisible}}">
+          <text class="stat-icon">🕐</text>
+          <view><view class="stat-label">最佳时段</view><view class="stat-value">{{starInfo.milkyWay.bestHours}}</view></view>
+        </view>
+      </view>
+
+      <view class="forecast-reasons" style="margin-top:12rpx;">
+        <view wx:for="{{starInfo.reasons}}" wx:key="index" class="reason-item">{{item}}</view>
+      </view>
+
+      <!-- Astrophotography quick params -->
+      <view style="margin-top:16rpx;">
+        <view class="photo-device-title" style="color:#b388ff;">📷 星空摄影参数</view>
+        <view class="photo-grid">
+          <view class="photo-param">
+            <view class="photo-param-label">光圈</view>
+            <view class="photo-param-value">{{starInfo.astro.aperture}}</view>
+          </view>
+          <view class="photo-param">
+            <view class="photo-param-label">快门</view>
+            <view class="photo-param-value">{{starInfo.astro.shutter}}</view>
+            <view class="photo-param-note">{{starInfo.astro.shutterNote}}</view>
+          </view>
+          <view class="photo-param">
+            <view class="photo-param-label">ISO</view>
+            <view class="photo-param-value">{{starInfo.astro.iso}}</view>
+          </view>
+          <view class="photo-param">
+            <view class="photo-param-label">白平衡</view>
+            <view class="photo-param-value">{{starInfo.astro.wb}}</view>
+          </view>
+        </view>
+        <view class="photo-grid" style="margin-top:8rpx;">
+          <view class="photo-param">
+            <view class="photo-param-label">对焦</view>
+            <view class="photo-param-value">{{starInfo.astro.focus}}</view>
+            <view class="photo-param-note">{{starInfo.astro.focusNote}}</view>
+          </view>
+          <view class="photo-param">
+            <view class="photo-param-label">堆栈降噪</view>
+            <view class="photo-param-value" style="font-size:24rpx;">{{starInfo.astro.stacking}}</view>
+          </view>
+        </view>
+      </view>
+
+      <view class="disclaimer">🌌 银河核心（人马座方向）在北半球 4-10 月可见。新月前后 ±5 天是最佳观测窗口。高海拔、远离城市光污染的地点效果最佳。</view>
+    </view>
+
     <!-- Safety Alerts -->
     <view wx:if="{{safetyAlerts.length}}" style="margin-bottom:20rpx;">
       <view wx:for="{{safetyAlerts}}" wx:key="text" class="safety-alert safety-{{item.type}}">
