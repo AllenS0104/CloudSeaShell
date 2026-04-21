@@ -1,5 +1,6 @@
 const calc = require('../../utils/calculations');
 const api = require('../../utils/services');
+const fusion = require('../../utils/fusion');
 
 const DEFAULT_ELEVATION = 300;
 
@@ -26,6 +27,8 @@ Page({
     currentDewGap: '--',
     hourlyList: [],
     markers: [],
+    fusionResult: null,
+    fusionLoading: false,
   },
 
   onLoad() {
@@ -141,6 +144,9 @@ Page({
       });
 
       this.renderWeather();
+
+      // Background: multi-model fusion (non-blocking)
+      this.fetchFusion(lat, lon);
     } catch (err) {
       this.setData({
         loading: false,
@@ -223,5 +229,23 @@ Page({
       currentDewGap: currentDewGap.toFixed(1),
       hourlyList,
     });
+  },
+
+  async fetchFusion(lat, lon) {
+    this.setData({ fusionLoading: true, fusionResult: null });
+
+    try {
+      const modelResults = await fusion.fetchMultiModelWeather(lat, lon);
+      const result = fusion.fuseModelPredictions(modelResults, this.data.elevation, this.data.selectedDayIndex);
+
+      if (result) {
+        this.setData({ fusionResult: result, fusionLoading: false });
+      } else {
+        this.setData({ fusionLoading: false });
+      }
+    } catch (err) {
+      console.warn('多模式融合失败:', err.message);
+      this.setData({ fusionLoading: false });
+    }
   },
 });

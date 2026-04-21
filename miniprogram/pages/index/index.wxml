@@ -144,6 +144,57 @@
       </view>
     </view>
 
+    <!-- Multi-Model Fusion -->
+    <view class="card" wx:if="{{fusionResult || fusionLoading}}">
+      <view class="section-heading">
+        <view class="section-eyebrow">MULTI-MODEL FUSION</view>
+        <view class="section-title">多模式融合预测</view>
+      </view>
+
+      <view wx:if="{{fusionLoading}}" class="loading-text">正在获取多模式数据（ICON / GFS / JMA / ECMWF）...</view>
+
+      <view wx:if="{{fusionResult}}">
+        <view class="forecast-card">
+          <view class="forecast-result {{fusionResult.fusedSuggestion ? 'forecast-positive' : 'forecast-negative'}}">
+            {{fusionResult.resultText}}
+          </view>
+        </view>
+
+        <view class="stats-grid" style="margin-top:16rpx;">
+          <view class="stat-card">
+            <text class="stat-icon">🔗</text>
+            <view><view class="stat-label">模式数量</view><view class="stat-value">{{fusionResult.modelCount}} 个</view></view>
+          </view>
+          <view class="stat-card">
+            <text class="stat-icon" style="color:{{fusionResult.agreement.color}}">●</text>
+            <view><view class="stat-label">一致性</view><view class="stat-value">{{fusionResult.agreement.label}}</view></view>
+          </view>
+          <view class="stat-card" wx:if="{{fusionResult.timeConsensus}}">
+            <text class="stat-icon">🕐</text>
+            <view><view class="stat-label">共识时段</view><view class="stat-value">{{fusionResult.timeConsensus}}</view></view>
+          </view>
+          <view class="stat-card">
+            <text class="stat-icon">🌡️</text>
+            <view><view class="stat-label">逆温层</view><view class="stat-value">{{fusionResult.inversionConsensus ? '多数检测到' : '未明显检测'}}</view></view>
+          </view>
+        </view>
+
+        <view class="forecast-summary" style="margin-top:12rpx;">{{fusionResult.summary}}</view>
+
+        <!-- Per-model breakdown -->
+        <view style="margin-top:16rpx;">
+          <view class="section-eyebrow" style="margin-bottom:8rpx;">各模式得分</view>
+          <view wx:for="{{fusionResult.modelDetails}}" wx:key="name" class="hour-item">
+            <view class="hour-time">{{item.name}}</view>
+            <view class="hour-value">{{item.score}} 分</view>
+            <view class="hour-value" style="color:{{item.suggestion ? '#28a745' : '#6c757d'}}">{{item.label}}</view>
+          </view>
+        </view>
+
+        <view class="disclaimer">📊 融合预测基于 {{fusionResult.modelCount}} 个独立气象模式的加权平均，分歧度 ±{{fusionResult.stdDev}} 分。模式越一致，预测越可靠。</view>
+      </view>
+    </view>
+
     <!-- SOS -->
     <button class="sos-button" bindtap="onSOS">🆘 SOS 紧急求救</button>
   </view>
