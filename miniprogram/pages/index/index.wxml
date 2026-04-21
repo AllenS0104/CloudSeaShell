@@ -393,6 +393,62 @@
           </view>
         </view>
 
+        <!-- Shooting Timeline -->
+        <view class="photo-section" wx:if="{{photoParams.timeline.length}}">
+          <view class="photo-device-title">⏱️ 拍摄时间轴</view>
+          <view class="timeline-bar">
+            <view wx:for="{{photoParams.timeline}}" wx:key="label" class="timeline-segment" style="flex:{{item.durationMin}};background:{{item.color}};">
+              <view class="timeline-label">{{item.icon}}</view>
+            </view>
+          </view>
+          <view class="timeline-list">
+            <view wx:for="{{photoParams.timeline}}" wx:key="label" class="timeline-item">
+              <text class="timeline-time">{{item.startTime}}-{{item.endTime}}</text>
+              <text class="timeline-icon">{{item.icon}}</text>
+              <text class="timeline-name">{{item.label}}</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- ND Calculator -->
+        <view class="photo-section" wx:if="{{photoParams.ndCalc}}">
+          <view class="photo-device-title">🔢 ND 减光计算</view>
+          <view class="photo-grid">
+            <view class="photo-param">
+              <view class="photo-param-label">目标 2 秒快门需要</view>
+              <view class="photo-param-value">{{photoParams.ndCalc.filter}}</view>
+              <view class="photo-param-note">减光 {{photoParams.ndCalc.stops}} 档</view>
+            </view>
+          </view>
+        </view>
+
+        <!-- Timelapse -->
+        <view class="photo-section" wx:if="{{photoParams.timelapse}}">
+          <view class="photo-device-title">🎥 延时摄影建议</view>
+          <view class="photo-grid">
+            <view class="photo-param">
+              <view class="photo-param-label">拍摄间隔</view>
+              <view class="photo-param-value">{{photoParams.timelapse.interval}}</view>
+            </view>
+            <view class="photo-param">
+              <view class="photo-param-label">建议时长</view>
+              <view class="photo-param-value">{{photoParams.timelapse.duration}}</view>
+            </view>
+            <view class="photo-param">
+              <view class="photo-param-label">预计张数</view>
+              <view class="photo-param-value">{{photoParams.timelapse.frames}}</view>
+            </view>
+            <view class="photo-param">
+              <view class="photo-param-label">成片长度</view>
+              <view class="photo-param-value">{{photoParams.timelapse.videoLength}}</view>
+            </view>
+          </view>
+          <view class="photo-param-note" style="margin-top:8rpx;">{{photoParams.timelapse.note}}</view>
+          <view class="forecast-reasons" style="margin-top:8rpx;">
+            <view wx:for="{{photoParams.timelapse.tips}}" wx:key="index" class="reason-item">{{item}}</view>
+          </view>
+        </view>
+
         <view class="disclaimer" style="margin-bottom:40rpx;">参考自巧摄(Planit)曝光计算思路，参数基于当前天气条件自动推算，实际拍摄请根据现场光线微调。</view>
       </scroll-view>
     </view>

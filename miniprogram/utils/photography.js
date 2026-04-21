@@ -64,7 +64,7 @@ function getLightingPhase(timeString, sunriseTime, sunsetTime) {
  * Calculate EV (Exposure Value) from lighting conditions
  * Simplified EV estimation for outdoor cloud-sea scenarios
  */
-function estimateEV(lighting, cloudCover, visibility) {
+function estimateEV(lighting, cloudCover, visibility, elevation) {
   const baseEV = {
     'night': 2,
     'blue-hour-morning': 6,
@@ -90,7 +90,13 @@ function estimateEV(lighting, cloudCover, visibility) {
   const vis = Number(visibility ?? 10000);
   if (vis < 2000) ev -= 1;
 
-  return Math.max(1, Math.min(16, ev));
+  // Altitude correction: UV intensity increases ~10-12% per 1000m
+  const elev = Number(elevation ?? 0);
+  if (elev > 500) {
+    ev += Math.min(1.5, elev / 2000 * 0.7);
+  }
+
+  return Math.round(Math.max(1, Math.min(17, ev)) * 10) / 10;
 }
 
 /**
@@ -380,6 +386,115 @@ function buildCelestialInfo(sunriseTime, sunsetTime) {
 }
 
 /**
+ * ND filter calculator: how many stops needed for target shutter speed
+ */
+function calculateNDStops(ev, targetShutterSec, aperture, iso) {
+  const N = parseFloat(String(aperture).replace('f/', '')) || 8;
+  const isoVal = Number(iso) || 100;
+  // Current shutter at this EV: t = N² / (2^(EV - log2(ISO/100)))
+  const evAdj = ev - Math.log2(isoVal / 100);
+  const currentShutter = (N * N) / Math.pow(2, evAdj);
+  const targetSec = Number(targetShutterSec) || 1;
+
+  if (targetSec <= currentShutter) return { stops: 0, filter: '不需要减光镜' };
+
+  const stops = Math.round(Math.log2(targetSec / currentShutter) * 10) / 10;
+  let filter;
+  if (stops <= 3) filter = 'ND8 (3档)';
+  else if (stops <= 6) filter = 'ND64 (6档)';
+  else if (stops <= 10) filter = 'ND1000 (10档)';
+  else if (stops <= 13) filter = 'ND8 + ND1000 (13档)';
+  else filter = 'ND64 + ND1000 (16档)';
+
+  return { stops: Math.round(stops * 10) / 10, filter };
+}
+
+/**
+ * Timelapse recommendation for cloud sea
+ */
+function buildTimelapseParams(cloudSeaScore, windSpeed, lighting) {
+  const hasCloudSea = cloudSeaScore >= 55;
+  const windCalm = (windSpeed ?? 0) <= 5;
+
+  let interval, duration, frames, note;
+
+  if (hasCloudSea && windCalm) {
+    interval = '3-5 秒';
+    duration = '30-60 分钟';
+    frames = '360-1200 张';
+    note = '云海缓慢翻涌，间隔稍长可呈现流动感';
+  } else if (hasCloudSea) {
+    interval = '2-3 秒';
+    duration = '20-40 分钟';
+    frames = '400-1200 张';
+    note = '风大云动快，缩短间隔捕捉变化';
+  } else if (lighting.phase.includes('golden') || lighting.phase.includes('blue-hour')) {
+    interval = '5-8 秒';
+    duration = '30-45 分钟';
+    frames = '225-540 张';
+    note = '记录光线色温变化过程';
+  } else {
+    interval = '5-10 秒';
+    duration = '20-30 分钟';
+    frames = '120-360 张';
+    note = '日间云层变化较慢';
+  }
+
+  return {
+    interval,
+    duration,
+    frames,
+    note,
+    videoLength: '按 24fps 约 5-50 秒成片',
+    tips: [
+      '使用三脚架 + 快门线/遥控',
+      '关闭自动对焦，手动对焦后锁定',
+      '关闭自动白平衡，固定色温',
+      hasCloudSea ? '拍摄 RAW+JPEG，后期更灵活' : '拍摄 JPEG 节省存储空间',
+    ],
+  };
+}
+
+/**
+ * Build shooting timeline (visual schedule of lighting phases)
+ */
+function buildShootingTimeline(sunriseTime, sunsetTime) {
+  if (!sunriseTime || !sunsetTime) return [];
+
+  const sr = new Date(sunriseTime);
+  const ss = new Date(sunsetTime);
+  const srMin = sr.getHours() * 60 + sr.getMinutes();
+  const ssMin = ss.getHours() * 60 + ss.getMinutes();
+
+  function fmt(minutes) {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+  }
+
+  const phases = [
+    { start: srMin - 90, end: srMin - 30, label: '蓝调', icon: '🌌', color: '#1a237e' },
+    { start: srMin - 30, end: srMin, label: '日出前', icon: '🌅', color: '#e65100' },
+    { start: srMin, end: srMin + 30, label: '黄金日出', icon: '🌄', color: '#ff8f00' },
+    { start: srMin + 30, end: srMin + 90, label: '日出后', icon: '☀️', color: '#fdd835' },
+    { start: srMin + 90, end: ssMin - 90, label: '日间', icon: '☀️', color: '#90caf9' },
+    { start: ssMin - 90, end: ssMin - 30, label: '日落前', icon: '🌇', color: '#fdd835' },
+    { start: ssMin - 30, end: ssMin, label: '黄金日落', icon: '🌅', color: '#ff8f00' },
+    { start: ssMin, end: ssMin + 30, label: '日落后', icon: '🌆', color: '#e65100' },
+    { start: ssMin + 30, end: ssMin + 90, label: '蓝调', icon: '🌌', color: '#1a237e' },
+  ];
+
+  return phases.map(p => ({
+    startTime: fmt(Math.max(0, p.start)),
+    endTime: fmt(Math.min(1439, p.end)),
+    label: p.label,
+    icon: p.icon,
+    color: p.color,
+    durationMin: Math.max(0, Math.min(1439, p.end) - Math.max(0, p.start)),
+  })).filter(p => p.durationMin > 0);
+}
+
+/**
  * Main entry: generate full photography recommendations
  */
 function generatePhotoRecommendations({
@@ -393,15 +508,17 @@ function generatePhotoRecommendations({
   elevation,
 }) {
   const lighting = getLightingPhase(timeString, sunriseTime, sunsetTime);
-  const ev = estimateEV(lighting, cloudCover, visibility);
+  const ev = estimateEV(lighting, cloudCover, visibility, elevation);
   const camera = generateCameraParams(ev, lighting, windSpeed, cloudSeaScore);
   const phone = generatePhoneParams(ev, lighting, windSpeed, cloudSeaScore);
   const filters = getFilterRecommendations(lighting, cloudSeaScore, windSpeed);
   const exposureTable = buildExposureTable(ev, cloudSeaScore);
   const depthOfField = calculateDepthOfField(24, camera.aperture);
   const celestial = buildCelestialInfo(sunriseTime, sunsetTime);
+  const ndCalc = calculateNDStops(ev, 2, camera.aperture, 100);
+  const timelapse = buildTimelapseParams(cloudSeaScore, windSpeed, lighting);
+  const timeline = buildShootingTimeline(sunriseTime, sunsetTime);
 
-  // Composition tips based on conditions
   const composition = [];
   if (cloudSeaScore >= 55) {
     composition.push('前景放入山石/树木/人物剪影增加纵深');
@@ -427,6 +544,9 @@ function generatePhotoRecommendations({
     exposureTable,
     depthOfField,
     celestial,
+    ndCalc,
+    timelapse,
+    timeline,
     composition: composition.slice(0, 4),
     summary: buildPhotoSummary(lighting, cloudSeaScore, windSpeed),
   };

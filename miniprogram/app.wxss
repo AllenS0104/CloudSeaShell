@@ -325,6 +325,58 @@ page {
   margin-top: 4rpx;
 }
 
+/* Shooting timeline */
+.timeline-bar {
+  display: flex;
+  height: 32rpx;
+  border-radius: 8rpx;
+  overflow: hidden;
+  margin-bottom: 12rpx;
+}
+
+.timeline-segment {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20rpx;
+}
+
+.timeline-label {
+  font-size: 18rpx;
+}
+
+.timeline-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8rpx;
+}
+
+.timeline-item {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  font-size: 22rpx;
+  color: #aab4c5;
+  padding: 4rpx 12rpx;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6rpx;
+}
+
+.timeline-time {
+  font-family: monospace;
+  font-size: 20rpx;
+  color: #8899aa;
+}
+
+.timeline-icon {
+  font-size: 20rpx;
+}
+
+.timeline-name {
+  font-size: 22rpx;
+  color: #eef4ff;
+}
+
 /* Safety alerts */
 .safety-alert {
   padding: 16rpx 24rpx;
