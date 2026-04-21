@@ -123,15 +123,6 @@ const PHONE_PRESETS = {
     features: ['ProRAW 拍摄保留最大后期空间', '48MP全像素输出', '动作模式防抖适合手持延时', '夜景模式最长30秒曝光'],
     timelapse: '内置延时摄影模式，自动调整间隔',
   },
-  'iphone-15': {
-    brand: 'Apple', model: 'iPhone 15 / 15 Plus',
-    lenses: [
-      { name: '超广角 13mm', focal: 13, aperture: 2.4, note: '全景拍摄', bestFor: '壮阔全景' },
-      { name: '广角 26mm', focal: 26, aperture: 1.6, note: '主摄', bestFor: '主力拍摄' },
-    ],
-    features: ['HEIF格式节省空间', 'HDR自动合成明暗细节', '内置延时摄影'],
-    timelapse: '内置延时摄影模式',
-  },
   'huawei-p70pro': {
     brand: 'Huawei', model: 'P70 Pro / Ultra',
     lenses: [
@@ -150,6 +141,37 @@ const PHONE_PRESETS = {
       { name: '长焦 75mm', focal: 75, aperture: 2.6, note: '3.2x光学', bestFor: '远景特写' },
     ],
     features: ['徕卡色彩（鲜艳/经典）直出氛围', '长曝光/光绘/星轨模式', '专业模式支持RAW', '超级夜景AI降噪'],
+    timelapse: '相机-更多-延时摄影',
+  },
+  'oneplus-13': {
+    brand: 'OnePlus', model: '一加 13',
+    lenses: [
+      { name: '超广角 14mm', focal: 14, aperture: 2.2, note: '120°视角', bestFor: '壮阔全景' },
+      { name: '广角主摄 23mm', focal: 23, aperture: 1.6, note: '5000万像素 LYT-808', bestFor: '主力拍摄' },
+      { name: '长焦 73mm', focal: 73, aperture: 2.6, note: '3x光学变焦', bestFor: '远景特写' },
+    ],
+    features: ['哈苏色彩调校直出大片', '专业模式支持RAW+长曝光', 'AI场景识别自动优化', '超级夜景+星空模式'],
+    timelapse: '相机-更多-延时摄影',
+  },
+  'oppo-findx8pro': {
+    brand: 'OPPO', model: 'Find X8 Pro',
+    lenses: [
+      { name: '超广角 15mm', focal: 15, aperture: 2.2, note: '114°视角', bestFor: '壮阔全景' },
+      { name: '广角主摄 23mm', focal: 23, aperture: 1.6, note: '5000万像素 LYT-808', bestFor: '主力拍摄' },
+      { name: '长焦 65mm', focal: 65, aperture: 2.6, note: '3x光学变焦', bestFor: '中距特写' },
+      { name: '超长焦 135mm', focal: 135, aperture: 2.6, note: '6x光学潜望', bestFor: '远景特写' },
+    ],
+    features: ['哈苏人像+风光模式', '专业模式RAW/长曝光/星轨', 'AI消除/扩图', '闪速抓拍不糊片'],
+    timelapse: '相机-更多-延时摄影',
+  },
+  'vivo-x200pro': {
+    brand: 'vivo', model: 'X200 Pro',
+    lenses: [
+      { name: '超广角 15mm', focal: 15, aperture: 2.0, note: '119°视角 JN1', bestFor: '壮阔全景' },
+      { name: '广角主摄 23mm', focal: 23, aperture: 1.57, note: '5000万像素 HP9', bestFor: '主力拍摄' },
+      { name: '长焦 100mm', focal: 100, aperture: 2.67, note: '蔡司APO长焦', bestFor: '远景特写' },
+    ],
+    features: ['蔡司T*镀膜减少鬼影眩光', '蔡司自然色/生动色彩模式', '长曝光/星空/流光模式', '专业模式RAW输出'],
     timelapse: '相机-更多-延时摄影',
   },
   'samsung-s25ultra': {
