@@ -17,8 +17,42 @@
   <!-- Status Banner -->
   <view wx:if="{{statusText}}" class="status-banner status-{{statusType}}">{{statusText}}</view>
 
-  <!-- Loading -->
-  <view wx:if="{{loading}}" class="loading-text">正在加载天气数据...</view>
+  <!-- Hero Decision Card -->
+  <view wx:if="{{heroCard && !loading}}" class="hero-card {{heroCard.bgClass}}">
+    <text class="hero-emoji">{{heroCard.emoji}}</text>
+    <text class="hero-text">{{heroCard.text}}</text>
+  </view>
+
+  <!-- Loading Skeleton -->
+  <view wx:if="{{loading}}" class="skeleton-container">
+    <!-- Header placeholder -->
+    <view class="skeleton-header">
+      <view class="skeleton-block skeleton-pulse" style="width:40%;height:40rpx;margin:0 auto 16rpx;"></view>
+      <view class="skeleton-block skeleton-pulse" style="width:60%;height:60rpx;margin:0 auto 16rpx;"></view>
+      <view class="skeleton-block skeleton-pulse" style="width:80%;height:30rpx;margin:0 auto;"></view>
+    </view>
+    <!-- Map placeholder -->
+    <view class="skeleton-block skeleton-pulse skeleton-map"></view>
+    <!-- Stats row 1 -->
+    <view class="skeleton-stats-row">
+      <view class="skeleton-block skeleton-pulse skeleton-stat"></view>
+      <view class="skeleton-block skeleton-pulse skeleton-stat"></view>
+      <view class="skeleton-block skeleton-pulse skeleton-stat"></view>
+    </view>
+    <!-- Stats row 2 -->
+    <view class="skeleton-stats-row">
+      <view class="skeleton-block skeleton-pulse skeleton-stat"></view>
+      <view class="skeleton-block skeleton-pulse skeleton-stat"></view>
+      <view class="skeleton-block skeleton-pulse skeleton-stat"></view>
+    </view>
+    <!-- Forecast card placeholder -->
+    <view class="skeleton-forecast">
+      <view class="skeleton-block skeleton-pulse" style="width:50%;height:36rpx;margin:0 auto 20rpx;"></view>
+      <view class="skeleton-block skeleton-pulse" style="width:90%;height:80rpx;margin:0 auto 16rpx;border-radius:12rpx;"></view>
+      <view class="skeleton-block skeleton-pulse" style="width:100%;height:28rpx;margin-bottom:10rpx;"></view>
+      <view class="skeleton-block skeleton-pulse" style="width:85%;height:28rpx;"></view>
+    </view>
+  </view>
 
   <!-- Main Content -->
   <view wx:if="{{!loading && weatherData}}">

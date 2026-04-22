@@ -42,6 +42,7 @@ Page({
     cameraRec: null,
     phoneRec: null,
     starInfo: null,
+    heroCard: null,
   },
 
   onLoad() {
@@ -301,6 +302,25 @@ Page({
     this.setData({
       starInfo: analyzer.analyzeStars(timeString, lat, analysis.cloudCover, analysis.visibility, analysis.humidity, elevation),
     });
+
+    // Hero Card decision
+    const cloudScore = analysis.score || 0;
+    const glowScore = this.data.glowAnalysis?.score || 0;
+    const starScore = this.data.starInfo?.score || 0;
+
+    let heroCard = null;
+    if (cloudScore >= 70 && glowScore >= 60) {
+      heroCard = { emoji: '🔥', text: '今日大片日！云海+晚霞双绝，必须出发', bgClass: 'hero-epic' };
+    } else if (cloudScore >= 55) {
+      heroCard = { emoji: '☁️', text: '云海有戏，建议守候', bgClass: 'hero-cloud' };
+    } else if (glowScore >= 60) {
+      heroCard = { emoji: '🌅', text: '晚霞概率较高，日落前到位', bgClass: 'hero-glow' };
+    } else if (starScore >= 60) {
+      heroCard = { emoji: '🌌', text: '今晚适合拍银河', bgClass: 'hero-star' };
+    } else {
+      heroCard = { emoji: '😴', text: '今天适合在家修图', bgClass: 'hero-rest' };
+    }
+    this.setData({ heroCard });
   },
 
   async fetchFusion(lat, lon) {
