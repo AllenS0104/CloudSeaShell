@@ -3,6 +3,7 @@ const api = require('../../utils/services');
 const fusion = require('../../utils/fusion');
 const presets = require('../../utils/camera-presets');
 const analyzer = require('../../utils/analyzer');
+const feedback = require('../../utils/feedback');
 
 const DEFAULT_ELEVATION = 300;
 
@@ -43,6 +44,16 @@ Page({
     phoneRec: null,
     starInfo: null,
     heroCard: null,
+    // Feedback
+    showFeedback: false,
+    feedbackRecords: [],
+    currentFeedback: null,
+    feedbackStats: null,
+    fbCloudSea: null,
+    fbGlow: null,
+    fbStars: null,
+    fbRating: null,
+    fbNote: '',
   },
 
   onLoad() {
@@ -321,6 +332,118 @@ Page({
       heroCard = { emoji: '😴', text: '今天适合在家修图', bgClass: 'hero-rest' };
     }
     this.setData({ heroCard });
+
+    // Auto-save prediction snapshot to feedback
+    this.autoSaveFeedback();
+  },
+
+  autoSaveFeedback() {
+    const { analysis, glowAnalysis, starInfo, lat, lon, locationName } = this.data;
+    if (!analysis) return;
+
+    const record = {
+      location: { lat, lon, name: locationName },
+      predictions: {
+        cloudSea: { score: analysis.score || 0, suggestion: analysis.suggestion || '' },
+        glow: { score: (glowAnalysis && glowAnalysis.score) || 0, label: (glowAnalysis && glowAnalysis.label) || '' },
+        stars: { score: (starInfo && starInfo.score) || 0, label: (starInfo && starInfo.label) || '' },
+      },
+    };
+
+    const saved = feedback.saveFeedback(record);
+    this.setData({ currentFeedback: saved });
+  },
+
+  onOpenFeedback() {
+    const records = feedback.getFeedbackRecords();
+    const stats = feedback.getFeedbackStats();
+    const current = this.data.currentFeedback || (records.length > 0 ? records[0] : null);
+
+    // Restore existing actual values if any
+    const act = (current && current.actual) || {};
+    this.setData({
+      showFeedback: true,
+      feedbackRecords: records,
+      feedbackStats: stats,
+      currentFeedback: current,
+      fbCloudSea: act.cloudSea !== undefined ? act.cloudSea : null,
+      fbGlow: act.glow !== undefined ? act.glow : null,
+      fbStars: act.stars !== undefined ? act.stars : null,
+      fbRating: act.rating !== undefined ? act.rating : null,
+      fbNote: act.note || '',
+    });
+  },
+
+  onCloseFeedback() {
+    this.setData({ showFeedback: false });
+  },
+
+  onToggleCloudSea() {
+    const v = this.data.fbCloudSea;
+    // null -> true -> false -> null
+    this.setData({ fbCloudSea: v === null ? true : (v === true ? false : null) });
+  },
+
+  onToggleGlow() {
+    const v = this.data.fbGlow;
+    this.setData({ fbGlow: v === null ? true : (v === true ? false : null) });
+  },
+
+  onToggleStars() {
+    const v = this.data.fbStars;
+    this.setData({ fbStars: v === null ? true : (v === true ? false : null) });
+  },
+
+  onSetRating(e) {
+    const rating = Number(e.currentTarget.dataset.rating);
+    this.setData({ fbRating: this.data.fbRating === rating ? null : rating });
+  },
+
+  onFeedbackNoteInput(e) {
+    this.setData({ fbNote: e.detail.value });
+  },
+
+  onSubmitFeedback() {
+    const { currentFeedback, fbCloudSea, fbGlow, fbStars, fbRating, fbNote } = this.data;
+    if (!currentFeedback) {
+      wx.showToast({ title: '暂无预测记录', icon: 'none' });
+      return;
+    }
+
+    const actualData = {
+      cloudSea: fbCloudSea,
+      glow: fbGlow,
+      stars: fbStars,
+      rating: fbRating,
+      note: fbNote,
+    };
+
+    const ok = feedback.updateFeedback(currentFeedback.id, actualData);
+    if (ok) {
+      const stats = feedback.getFeedbackStats();
+      this.setData({
+        feedbackStats: stats,
+        feedbackRecords: feedback.getFeedbackRecords(),
+      });
+      wx.showToast({ title: '反馈已保存 ✓', icon: 'success' });
+    } else {
+      wx.showToast({ title: '保存失败', icon: 'none' });
+    }
+  },
+
+  onExportFeedback() {
+    const csv = feedback.exportFeedbackCSV();
+    if (!csv) {
+      wx.showToast({ title: '暂无数据可导出', icon: 'none' });
+      return;
+    }
+
+    wx.setClipboardData({
+      data: csv,
+      success() {
+        wx.showToast({ title: '已复制到剪贴板', icon: 'success' });
+      },
+    });
   },
 
   async fetchFusion(lat, lon) {

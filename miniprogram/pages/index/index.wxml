@@ -353,6 +353,10 @@
       <text class="bottom-btn-icon">📸</text>
       <text class="bottom-btn-label">摄影参数</text>
     </view>
+    <view class="bottom-btn" bindtap="onOpenFeedback">
+      <text class="bottom-btn-icon">📝</text>
+      <text class="bottom-btn-label">反馈</text>
+    </view>
     <view class="bottom-btn" bindtap="onSOS">
       <text class="bottom-btn-icon">🆘</text>
       <text class="bottom-btn-label">紧急求救</text>
@@ -660,6 +664,115 @@
         </view>
 
         <view class="disclaimer" style="margin-bottom:40rpx;">参考自巧摄(Planit)曝光计算思路，参数基于当前天气条件自动推算，实际拍摄请根据现场光线微调。</view>
+      </scroll-view>
+    </view>
+  </view>
+
+  <!-- Feedback Popup Panel -->
+  <view class="photo-overlay {{showFeedback ? 'photo-overlay-show' : ''}}">
+    <view class="photo-overlay-mask" bindtap="onCloseFeedback"></view>
+    <view class="photo-panel" catchtap="">
+      <view class="photo-panel-header">
+        <view class="photo-panel-title">📝 预测反馈</view>
+        <view class="photo-panel-close" bindtap="onCloseFeedback">✕</view>
+      </view>
+
+      <scroll-view scroll-y class="photo-panel-body">
+        <view wx:if="{{currentFeedback}}">
+          <!-- Today's prediction snapshot -->
+          <view class="fb-section">
+            <view class="fb-section-title">📊 今日预测快照</view>
+            <view class="fb-pred-row">
+              <view class="fb-pred-item">
+                <text class="fb-pred-icon">☁️</text>
+                <text class="fb-pred-label">云海</text>
+                <text class="fb-pred-score">{{currentFeedback.predictions.cloudSea.score}} 分</text>
+              </view>
+              <view class="fb-pred-item">
+                <text class="fb-pred-icon">🌅</text>
+                <text class="fb-pred-label">晚霞</text>
+                <text class="fb-pred-score">{{currentFeedback.predictions.glow.score}} 分</text>
+              </view>
+              <view class="fb-pred-item">
+                <text class="fb-pred-icon">🌌</text>
+                <text class="fb-pred-label">银河</text>
+                <text class="fb-pred-score">{{currentFeedback.predictions.stars.score}} 分</text>
+              </view>
+            </view>
+            <view class="fb-date-info">{{currentFeedback.date}} · {{currentFeedback.location.name}}</view>
+          </view>
+
+          <!-- Actual toggles -->
+          <view class="fb-section">
+            <view class="fb-section-title">✅ 实际是否出现</view>
+            <view class="fb-toggle-row">
+              <view class="fb-toggle-item" bindtap="onToggleCloudSea">
+                <text class="fb-toggle-icon">☁️</text>
+                <text class="fb-toggle-label">云海</text>
+                <view class="fb-toggle-btn {{fbCloudSea === true ? 'fb-toggle-yes' : (fbCloudSea === false ? 'fb-toggle-no' : 'fb-toggle-null')}}">
+                  {{fbCloudSea === true ? '✓ 是' : (fbCloudSea === false ? '✗ 否' : '未填')}}
+                </view>
+              </view>
+              <view class="fb-toggle-item" bindtap="onToggleGlow">
+                <text class="fb-toggle-icon">🌅</text>
+                <text class="fb-toggle-label">晚霞</text>
+                <view class="fb-toggle-btn {{fbGlow === true ? 'fb-toggle-yes' : (fbGlow === false ? 'fb-toggle-no' : 'fb-toggle-null')}}">
+                  {{fbGlow === true ? '✓ 是' : (fbGlow === false ? '✗ 否' : '未填')}}
+                </view>
+              </view>
+              <view class="fb-toggle-item" bindtap="onToggleStars">
+                <text class="fb-toggle-icon">🌌</text>
+                <text class="fb-toggle-label">银河</text>
+                <view class="fb-toggle-btn {{fbStars === true ? 'fb-toggle-yes' : (fbStars === false ? 'fb-toggle-no' : 'fb-toggle-null')}}">
+                  {{fbStars === true ? '✓ 是' : (fbStars === false ? '✗ 否' : '未填')}}
+                </view>
+              </view>
+            </view>
+          </view>
+
+          <!-- Rating -->
+          <view class="fb-section">
+            <view class="fb-section-title">⭐ 整体评分</view>
+            <view class="fb-rating-row">
+              <view wx:for="{{[1,2,3,4,5]}}" wx:key="*this"
+                class="fb-star {{fbRating >= item ? 'fb-star-active' : ''}}"
+                data-rating="{{item}}" bindtap="onSetRating">★</view>
+            </view>
+          </view>
+
+          <!-- Note -->
+          <view class="fb-section">
+            <view class="fb-section-title">💬 备注（可选）</view>
+            <textarea class="fb-note-input" placeholder="记录现场情况、拍摄心得..."
+              value="{{fbNote}}" bindinput="onFeedbackNoteInput" maxlength="200" />
+          </view>
+
+          <!-- Submit -->
+          <view class="fb-submit-btn" bindtap="onSubmitFeedback">提交反馈</view>
+        </view>
+
+        <view wx:else class="fb-empty-hint">暂无预测记录，请先查看天气预报</view>
+
+        <!-- Stats & Export -->
+        <view class="fb-section fb-stats-section" wx:if="{{feedbackStats}}">
+          <view class="fb-stats-row">
+            <view class="fb-stats-item">
+              <text class="fb-stats-num">{{feedbackStats.total}}</text>
+              <text class="fb-stats-label">总记录</text>
+            </view>
+            <view class="fb-stats-item">
+              <text class="fb-stats-num">{{feedbackStats.filled}}</text>
+              <text class="fb-stats-label">已反馈</text>
+            </view>
+            <view class="fb-stats-item">
+              <text class="fb-stats-num">{{feedbackStats.accuracy !== null ? feedbackStats.accuracy + '%' : '--'}}</text>
+              <text class="fb-stats-label">准确率</text>
+            </view>
+          </view>
+          <view class="fb-export-btn" bindtap="onExportFeedback">📋 导出 CSV 到剪贴板</view>
+        </view>
+
+        <view style="height:60rpx;"></view>
       </scroll-view>
     </view>
   </view>
