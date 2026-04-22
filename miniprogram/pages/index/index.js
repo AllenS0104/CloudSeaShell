@@ -1,10 +1,8 @@
 const calc = require('../../utils/calculations');
 const api = require('../../utils/services');
 const fusion = require('../../utils/fusion');
-const photo = require('../../utils/photography');
 const presets = require('../../utils/camera-presets');
-const stars = require('../../utils/stargazing');
-const sunsetModule = require('../../utils/sunset');
+const analyzer = require('../../utils/analyzer');
 
 const DEFAULT_ELEVATION = 300;
 
@@ -225,12 +223,7 @@ Page({
 
       const { data: weatherData, fromCache } = await api.fetchWeather(lat, lon);
 
-      const daySet = new Set(weatherData.hourly.time.map(t => t.split('T')[0]));
-      const dayLabels = Array.from(daySet).map((date, i) => {
-        const d = new Date(date);
-        const weekday = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][d.getDay()];
-        return i === 0 ? `${d.getMonth() + 1}月${d.getDate()}日${weekday} (今天)` : `${d.getMonth() + 1}月${d.getDate()}日${weekday}`;
-      });
+      const dayLabels = analyzer.buildDayLabels(weatherData.hourly.time);
 
       this.setData({
         elevation,
@@ -255,49 +248,14 @@ Page({
   },
 
   renderWeather() {
-    const { weatherData, elevation, selectedDayIndex } = this.data;
+    const { weatherData, elevation, selectedDayIndex, lat } = this.data;
     if (!weatherData) return;
 
     const hourly = weatherData.hourly;
-    const daily = weatherData.daily;
-    const current = weatherData.current;
-    const start = selectedDayIndex * 24;
 
-    // Day analysis
-    const dayAnalysis = calc.analyzeDayCloudSea(hourly, start, elevation);
-
-    // Current analysis (for day 0)
-    let analysis = dayAnalysis;
-    if (selectedDayIndex === 0 && current) {
-      const currentAnalysis = calc.analyzeCurrentCloudSea(current, elevation);
-      analysis = { ...dayAnalysis, ...currentAnalysis };
-    }
-
-    // Guidance
-    const sunrise = daily?.sunrise?.[selectedDayIndex];
-    const sunsetVal = daily?.sunset?.[selectedDayIndex];
-    const guidance = calc.buildObservationGuidance({
-      analysis: dayAnalysis.bestHour || analysis,
-      currentElevation: elevation,
-      sunriseTime: sunrise,
-      sunsetTime: sunsetVal,
-      bestTimeLabel: dayAnalysis.bestHour?.timeLabel,
-    });
-
-    // Current stats
-    const currentTemp = current ? Number(current.temperature_2m).toFixed(1) : dayAnalysis.temperatures[0]?.toFixed(1) || '--';
-    const currentDewGap = current
-      ? calc.dewPointSpread(current.temperature_2m, current.dew_point_2m)
-      : calc.dewPointSpread(dayAnalysis.temperatures[0], dayAnalysis.dewPoints[0]);
-
-    // Hourly list
-    const times = hourly.time.slice(start, start + 24);
-    const hourlyList = times.map((t, i) => ({
-      time: t.slice(11, 16),
-      temp: dayAnalysis.temperatures[i]?.toFixed(1) || '--',
-      cloudBase: dayAnalysis.cloudBases[i] || 0,
-      precip: dayAnalysis.precipitationProbabilities[i]?.toFixed(0) || '0',
-    }));
+    // Core weather analysis (cloud sea + guidance)
+    const wx = analyzer.analyzeWeather(weatherData, elevation, selectedDayIndex);
+    const { analysis, dayAnalysis, guidance, currentTemp, currentDewGap, hourlyList, sunrise, sunset, current, start } = wx;
 
     this.setData({
       loading: false,
@@ -328,81 +286,20 @@ Page({
       hourlyList,
     });
 
-    // Generate photography recommendations
-    const bestHourTime = dayAnalysis.bestHour?.timeLabel
-      ? hourly.time.slice(start, start + 24).find(t => t.includes(dayAnalysis.bestHour.timeLabel?.replace(':', ''))) || hourly.time[start]
-      : hourly.time[start];
-    const photoParams = photo.generatePhotoRecommendations({
-      timeString: current?.time || bestHourTime,
-      sunriseTime: sunrise,
-      sunsetTime: sunsetVal,
-      cloudCover: analysis.cloudCover,
-      visibility: analysis.visibility,
-      windSpeed: analysis.windSpeed,
-      cloudSeaScore: analysis.score,
-      elevation,
-    });
+    // Photography
+    const timeString = current?.time || hourly.time[start];
+    const photoParams = analyzer.buildPhotoParams(timeString, sunrise, sunset, analysis, elevation);
     this.setData({ photoParams });
 
-    // Sunset glow analysis
-    const glowResult = sunsetModule.analyzeDayGlow(hourly, start, sunrise, sunsetVal);
+    // Sunset glow
+    this.setData({ glowAnalysis: analyzer.analyzeGlow(hourly, start, sunrise, sunset) });
+
+    // Safety
+    this.setData({ safetyAlerts: analyzer.buildSafetyAlerts(hourly, start, current, elevation) });
+
+    // Stargazing
     this.setData({
-      glowAnalysis: {
-        score: glowResult.score,
-        level: glowResult.level,
-        label: glowResult.label,
-        resultText: glowResult.resultText,
-        summary: glowResult.summary,
-        reasons: glowResult.reasons,
-        bestSunrise: glowResult.bestSunrise ? { score: glowResult.bestSunrise.score, label: glowResult.bestSunrise.label } : null,
-        bestSunset: glowResult.bestSunset ? { score: glowResult.bestSunset.score, label: glowResult.bestSunset.label } : null,
-      },
-    });
-
-    // Safety alerts
-    const alerts = [];
-    const capeValues = (hourly.cape ?? []).slice(start, start + 24).map(v => Number(v ?? 0));
-    const maxCape = capeValues.length ? Math.max(...capeValues) : 0;
-    if (maxCape >= 1000) {
-      alerts.push({ type: 'danger', icon: '⛈️', text: `雷暴风险：CAPE ${Math.round(maxCape)} J/kg，山顶远离金属物体` });
-    } else if (maxCape >= 500) {
-      alerts.push({ type: 'warning', icon: '🌩️', text: `对流发展中：CAPE ${Math.round(maxCape)} J/kg，注意天气变化` });
-    }
-
-    const apparentTemp = current?.apparent_temperature ?? null;
-    if (apparentTemp !== null && apparentTemp < 5) {
-      alerts.push({ type: 'warning', icon: '🥶', text: `体感温度仅 ${Number(apparentTemp).toFixed(1)}°C，注意防寒保暖` });
-    }
-
-    if (elevation > 1500) {
-      alerts.push({ type: 'info', icon: '⛰️', text: '高海拔区域注意防晒和补水，紫外线显著增强' });
-    }
-
-    this.setData({ safetyAlerts: alerts });
-
-    // Stargazing analysis
-    const starInfo = stars.scoreStargazing({
-      date: current?.time || hourly.time[start],
-      latitude: this.data.lat,
-      cloudCover: analysis.cloudCover,
-      visibility: analysis.visibility,
-      humidity: analysis.humidity,
-      elevation,
-    });
-    const astroParams = stars.getAstroParams(starInfo.score, 24, 1);
-    this.setData({
-      starInfo: {
-        score: starInfo.score,
-        level: starInfo.level,
-        label: starInfo.label,
-        resultText: starInfo.resultText,
-        moonPhase: starInfo.moonPhase,
-        moonIllum: starInfo.moonIllum,
-        moonNote: starInfo.moonNote,
-        milkyWay: starInfo.milkyWay,
-        reasons: starInfo.reasons,
-        astro: astroParams,
-      },
+      starInfo: analyzer.analyzeStars(timeString, lat, analysis.cloudCover, analysis.visibility, analysis.humidity, elevation),
     });
   },
 
