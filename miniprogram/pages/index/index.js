@@ -431,6 +431,10 @@ Page({
     }
   },
 
+  onGoHistory() {
+    wx.navigateTo({ url: '/pages/history/history' });
+  },
+
   onExportFeedback() {
     const csv = feedback.exportFeedbackCSV();
     if (!csv) {

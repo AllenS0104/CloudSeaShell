@@ -1,0 +1,111 @@
+<view class="page-container">
+
+  <!-- Top Header with Export Button -->
+  <view class="history-header">
+    <view class="history-header-left">
+      <text class="history-title">📊 观测历史</text>
+      <text class="history-subtitle">预测记录与准确性趋势</text>
+    </view>
+    <view class="export-btn" bindtap="onExportCSV">
+      <text class="export-icon">📋</text>
+      <text class="export-label">导出</text>
+    </view>
+  </view>
+
+  <!-- Stats Cards -->
+  <view wx:if="{{stats}}" class="card stats-overview">
+    <view class="stats-grid-4">
+      <view class="stat-block">
+        <text class="stat-big-num">{{stats.total}}</text>
+        <text class="stat-block-label">总记录</text>
+      </view>
+      <view class="stat-block">
+        <text class="stat-big-num">{{stats.filled}}</text>
+        <text class="stat-block-label">已反馈</text>
+      </view>
+      <view class="stat-block">
+        <text class="stat-big-num {{stats.cloudSeaAccuracy !== null ? 'stat-accent' : 'stat-muted'}}">
+          {{stats.cloudSeaAccuracy !== null ? stats.cloudSeaAccuracy + '%' : '--'}}
+        </text>
+        <text class="stat-block-label">云海准确率</text>
+      </view>
+      <view class="stat-block">
+        <text class="stat-big-num {{stats.glowAccuracy !== null ? 'stat-accent' : 'stat-muted'}}">
+          {{stats.glowAccuracy !== null ? stats.glowAccuracy + '%' : '--'}}
+        </text>
+        <text class="stat-block-label">晚霞准确率</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- Empty State -->
+  <view wx:if="{{isEmpty}}" class="card empty-state">
+    <text class="empty-icon">🔭</text>
+    <text class="empty-text">暂无观测记录</text>
+    <text class="empty-hint">去首页查看预测吧</text>
+    <view class="empty-btn" bindtap="onGoHome">
+      <text>返回首页</text>
+    </view>
+  </view>
+
+  <!-- Records List -->
+  <view wx:if="{{!isEmpty}}" class="records-list">
+    <view wx:for="{{records}}" wx:key="id" class="card record-card">
+      <!-- Record Header: Date + Location -->
+      <view class="record-header">
+        <view class="record-date-row">
+          <text class="record-date">{{item.date}}</text>
+          <text class="record-location">📍 {{item.locationName}}</text>
+        </view>
+      </view>
+
+      <!-- Prediction Scores -->
+      <view class="pred-row">
+        <view class="pred-item pred-{{item.cloudAccuracy}}">
+          <text class="pred-icon">☁️</text>
+          <text class="pred-label">云海</text>
+          <text class="pred-score">{{item.cloudScore}}</text>
+        </view>
+        <view class="pred-item pred-{{item.glowAccuracy}}">
+          <text class="pred-icon">🌅</text>
+          <text class="pred-label">晚霞</text>
+          <text class="pred-score">{{item.glowScore}}</text>
+        </view>
+        <view class="pred-item pred-{{item.starsAccuracy}}">
+          <text class="pred-icon">🌌</text>
+          <text class="pred-label">银河</text>
+          <text class="pred-score">{{item.starsScore}}</text>
+        </view>
+      </view>
+
+      <!-- Actual Feedback Status -->
+      <view class="feedback-row">
+        <view class="fb-status-item {{item.cloudStatus.className}}">
+          <text>{{item.cloudStatus.icon}}</text>
+          <text class="fb-status-text">云海{{item.cloudStatus.text}}</text>
+        </view>
+        <view class="fb-status-item {{item.glowStatus.className}}">
+          <text>{{item.glowStatus.icon}}</text>
+          <text class="fb-status-text">晚霞{{item.glowStatus.text}}</text>
+        </view>
+        <view class="fb-status-item {{item.starsStatus.className}}">
+          <text>{{item.starsStatus.icon}}</text>
+          <text class="fb-status-text">银河{{item.starsStatus.text}}</text>
+        </view>
+      </view>
+
+      <!-- Rating Stars (if has feedback) -->
+      <view wx:if="{{item.hasRating}}" class="rating-row">
+        <text wx:for="{{item.ratingStars}}" wx:for-item="star" wx:key="index"
+              class="rating-star {{star.active ? 'star-active' : 'star-dim'}}">★</text>
+      </view>
+
+      <!-- Note -->
+      <view wx:if="{{item.note}}" class="record-note">
+        <text class="note-label">备注：</text>
+        <text class="note-text">{{item.note}}</text>
+      </view>
+    </view>
+  </view>
+
+</view>

@@ -357,6 +357,10 @@
       <text class="bottom-btn-icon">📝</text>
       <text class="bottom-btn-label">反馈</text>
     </view>
+    <view class="bottom-btn" bindtap="onGoHistory">
+      <text class="bottom-btn-icon">📊</text>
+      <text class="bottom-btn-label">历史</text>
+    </view>
     <view class="bottom-btn" bindtap="onSOS">
       <text class="bottom-btn-icon">🆘</text>
       <text class="bottom-btn-label">紧急求救</text>
