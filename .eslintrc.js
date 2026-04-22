@@ -31,5 +31,12 @@ module.exports = {
         'no-unused-vars': 'off',
       },
     },
+    {
+      files: ['__tests__/*.test.js'],
+      rules: {
+        'no-new-func': 'off',
+        'no-unused-vars': 'off',
+      },
+    },
   ],
 };
