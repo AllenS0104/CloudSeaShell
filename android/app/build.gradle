@@ -72,6 +72,13 @@ def enableProguardInReleaseBuilds = false
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
+// Load signing properties from signing.properties (excluded from git)
+def signingPropsFile = rootProject.file("signing.properties")
+def signingProps = new Properties()
+if (signingPropsFile.exists()) {
+    signingProps.load(new FileInputStream(signingPropsFile))
+}
+
 android {
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
@@ -92,11 +99,13 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
-        release {
-            storeFile file('cloudsea-release.keystore')
-            storePassword 'cloudseashell2026'
-            keyAlias 'cloudsea-key'
-            keyPassword 'cloudseashell2026'
+        if (signingProps.containsKey('CLOUDSEA_RELEASE_STORE_PASSWORD')) {
+            release {
+                storeFile file(signingProps['CLOUDSEA_RELEASE_STORE_FILE'] ?: 'cloudsea-release.keystore')
+                storePassword signingProps['CLOUDSEA_RELEASE_STORE_PASSWORD']
+                keyAlias signingProps['CLOUDSEA_RELEASE_KEY_ALIAS'] ?: 'cloudsea-key'
+                keyPassword signingProps['CLOUDSEA_RELEASE_KEY_PASSWORD']
+            }
         }
     }
     buildTypes {
@@ -104,7 +113,7 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
-            signingConfig signingConfigs.release
+            signingConfig signingConfigs.hasProperty('release') ? signingConfigs.release : signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
