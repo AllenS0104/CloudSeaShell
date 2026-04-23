@@ -1,7 +1,15 @@
 const calc = require('../../utils/calculations');
 const api = require('../../utils/services');
 const fusion = require('../../utils/fusion');
-const presets = require('../../utils/camera-presets');
+const searchHistory = require('../../utils/search-history');
+const favorites = require('../../utils/favorites');
+let presets = null;
+function getPresets() {
+  if (!presets) {
+    presets = require('../../utils/camera-presets');
+  }
+  return presets;
+}
 const analyzer = require('../../utils/analyzer');
 const feedback = require('../../utils/feedback');
 
@@ -17,6 +25,7 @@ Page({
     selectedDayIndex: 0,
     dayLabels: [],
     loading: true,
+    loadError: false,
     statusText: '',
     statusType: 'info',
     weatherData: null,
@@ -36,8 +45,8 @@ Page({
     showPhoto: false,
     glowAnalysis: null,
     safetyAlerts: [],
-    cameraPresets: presets.getAllCameraPresets(),
-    phonePresets: presets.getAllPhonePresets(),
+    cameraPresets: [],
+    phonePresets: [],
     selectedCamera: '',
     selectedPhone: '',
     cameraRec: null,
@@ -57,11 +66,19 @@ Page({
     // 折叠状态
     showHourly: false,
     showFusion: false,
+    // Search history & favorites
+    searchHistoryList: [],
+    isFav: false,
+    favList: [],
   },
 
   onLoad() {
     // Auto-locate on startup
     this.autoLocate();
+    this.setData({
+      searchHistoryList: searchHistory.getSearchHistory(),
+      favList: favorites.getFavorites(),
+    });
   },
 
   async autoLocate() {
@@ -105,6 +122,8 @@ Page({
         // Single result: use directly
         const r = results[0];
         this.setData({ lat: r.latitude, lon: r.longitude, locationName: r.name });
+        searchHistory.addSearchHistory({ name: r.name, lat: r.latitude, lon: r.longitude });
+        this.setData({ searchHistoryList: searchHistory.getSearchHistory() });
         await this.fetchAll(r.latitude, r.longitude);
       } else {
         // Multiple results: let user pick
@@ -115,6 +134,8 @@ Page({
           success(res) {
             const picked = results[res.tapIndex];
             that.setData({ lat: picked.latitude, lon: picked.longitude, locationName: picked.name });
+            searchHistory.addSearchHistory({ name: picked.name, lat: picked.latitude, lon: picked.longitude });
+            that.setData({ searchHistoryList: searchHistory.getSearchHistory() });
             that.fetchAll(picked.latitude, picked.longitude);
           },
           fail() {
@@ -144,7 +165,12 @@ Page({
   },
 
   onOpenPhoto() {
-    this.setData({ showPhoto: true });
+    const p = getPresets();
+    this.setData({
+      showPhoto: true,
+      cameraPresets: p.getAllCameraPresets(),
+      phonePresets: p.getAllPhonePresets(),
+    });
     this.updateDeviceRecs();
   },
 
@@ -171,12 +197,12 @@ Page({
 
     let cameraRec = null;
     if (selectedCamera) {
-      cameraRec = presets.getCameraRecommendation(selectedCamera, ev, lighting, wind, score);
+      cameraRec = getPresets().getCameraRecommendation(selectedCamera, ev, lighting, wind, score);
     }
 
     let phoneRec = null;
     if (selectedPhone) {
-      phoneRec = presets.getPhoneRecommendation(selectedPhone, score, lighting, wind);
+      phoneRec = getPresets().getPhoneRecommendation(selectedPhone, score, lighting, wind);
     }
 
     this.setData({ cameraRec, phoneRec });
@@ -234,13 +260,14 @@ Page({
   },
 
   async fetchAll(lat, lon) {
-    this.setData({ loading: true, statusText: '正在获取海拔数据...', statusType: 'info' });
+    this.setData({ loading: true, loadError: false, statusText: '正在获取海拔数据...', statusType: 'info' });
 
     try {
       const elevation = await api.fetchElevation(lat, lon);
       this.setData({ elevation, statusText: '正在获取天气数据...', statusType: 'info' });
 
-      const { data: weatherData, fromCache } = await api.fetchWeather(lat, lon);
+      const weatherResponse = await api.fetchWeather(lat, lon);
+      const { data: weatherData, fromCache } = weatherResponse;
 
       const dayLabels = analyzer.buildDayLabels(weatherData.hourly.time);
 
@@ -249,24 +276,33 @@ Page({
         weatherData,
         dayLabels,
         markers: [{ id: 0, latitude: lat, longitude: lon, width: 28, height: 36 }],
-        statusText: fromCache ? '使用缓存数据（点击刷新获取最新）' : '天气数据已更新',
-        statusType: 'success',
+        statusText: weatherResponse.offlineAge
+          ? `离线模式：数据来自 ${weatherResponse.offlineAge} 分钟前（联网后自动更新）`
+          : (fromCache ? '使用缓存数据（点击刷新获取最新）' : '天气数据已更新'),
+        statusType: weatherResponse.offlineAge ? 'warning' : 'success',
       });
 
       this.renderWeather();
+
+      this.setData({ isFav: favorites.isFavorite(lat, lon) });
 
       // Background: multi-model fusion (non-blocking)
       this.fetchFusion(lat, lon);
     } catch (err) {
       this.setData({
         loading: false,
+        loadError: true,
         statusText: `加载失败：${err.message}`,
         statusType: 'warning',
       });
     }
   },
 
-  renderWeather() {
+  onRetry() {
+    this.fetchAll(this.data.lat, this.data.lon);
+  },
+
+  renderWeather(){
     const { weatherData, elevation, selectedDayIndex, lat } = this.data;
     if (!weatherData) return;
 
@@ -483,5 +519,32 @@ Page({
 
   onToggleFusion() {
     this.setData({ showFusion: !this.data.showFusion });
+  },
+
+  onHistoryTap(e) {
+    const item = e.currentTarget.dataset.item;
+    if (!item) return;
+    this.setData({ lat: item.lat, lon: item.lon, locationName: item.name });
+    this.fetchAll(item.lat, item.lon);
+  },
+
+  onToggleFav() {
+    const { lat, lon, locationName, elevation } = this.data;
+    if (this.data.isFav) {
+      favorites.removeFavorite(lat, lon);
+    } else {
+      favorites.addFavorite({ name: locationName, lat, lon, elevation });
+    }
+    this.setData({ 
+      isFav: !this.data.isFav,
+      favList: favorites.getFavorites()
+    });
+  },
+
+  onFavTap(e) {
+    const item = e.currentTarget.dataset.item;
+    if (!item) return;
+    this.setData({ lat: item.lat, lon: item.lon, locationName: item.name, elevation: item.elevation || 300 });
+    this.fetchAll(item.lat, item.lon);
   },
 });
