@@ -2,9 +2,7 @@
 const DAY_BACKGROUND = '';
 const NIGHT_BACKGROUND = '';
 
-function clamp(value, min, max) {
-  return Math.min(Math.max(value, min), max);
-}
+const { clamp, lerp } = require('./math-utils');
 
 function cloudBaseFromHumidity(temperature, humidity) {
   const safeTemperature = Number.isFinite(temperature) ? temperature : 0;
@@ -17,11 +15,6 @@ function cloudBaseFromDewPoint(temperature, dewPoint) {
   const safeT = Number.isFinite(temperature) ? temperature : 0;
   const safeTd = Number.isFinite(dewPoint) ? dewPoint : 0;
   return Math.round(Math.max(0, 125 * (safeT - safeTd)));
-}
-
-function lerp(value, inLow, inHigh, outLow, outHigh) {
-  const t = clamp((value - inLow) / (inHigh - inLow), 0, 1);
-  return outLow + t * (outHigh - outLow);
 }
 
 function scoreHumidity(humidity) {
@@ -340,6 +333,8 @@ function analyzeCloudSeaSample({
   timeString,
   sunriseTime,
   inversionScore = 0,
+  inversionDetected = false,
+  inversionStrength = 0,
 }) {
   const safeTemperature = Number(temperature ?? 0);
   const safeHumidity = Number(humidity ?? 0);
@@ -352,7 +347,7 @@ function analyzeCloudSeaSample({
   const safePrecipitationProbability = Number(precipitationProbability ?? 0);
   const safePrecipitationAmount = Number(precipitationAmount ?? 0);
   const dewPointGap = dewPointSpread(safeTemperature, safeDewPoint);
-  const cloudBase = safeDewPoint !== 0
+  const cloudBase = (dewPoint !== null && dewPoint !== undefined)
     ? cloudBaseFromDewPoint(safeTemperature, safeDewPoint)
     : cloudBaseFromHumidity(safeTemperature, safeHumidity);
   const gapToElevation = elevation - cloudBase;
@@ -417,6 +412,8 @@ function analyzeCloudSeaSample({
       precipitationProbability: safePrecipitationProbability,
       precipitationAmount: safePrecipitationAmount,
       timeScore,
+      inversionDetected,
+      inversionStrength,
     }),
   };
 }
@@ -464,7 +461,7 @@ function maxOrZero(values) {
   return values.length ? Math.max(...values) : 0;
 }
 
-function analyzeDayCloudSea(hourly, start, elevation) {
+function analyzeDayCloudSea(hourly, start, elevation, sunriseTimeFromAPI) {
   const temperatures = hourly.temperature_2m.slice(start, start + 24).map((value) => Number(value ?? 0));
   const humidities = hourly.relative_humidity_2m.slice(start, start + 24).map((value) => Number(value ?? 0));
   const dewPoints = (hourly.dew_point_2m ?? []).slice(start, start + 24).map((value) => Number(value ?? 0));
@@ -476,10 +473,10 @@ function analyzeDayCloudSea(hourly, start, elevation) {
   const precipitationProbabilities = (hourly.precipitation_probability ?? []).slice(start, start + 24).map((value) => Number(value ?? 0));
   const precipitationAmounts = (hourly.precipitation ?? []).slice(start, start + 24).map((value) => Number(value ?? 0));
   const timeSeries = hourly.time.slice(start, start + 24);
-  const sunriseTime = timeSeries.find((timeString) => {
+  const sunriseTime = sunriseTimeFromAPI || timeSeries.find((timeString) => {
     const hour = new Date(timeString).getHours();
     return hour >= 5 && hour <= 7;
-  }) ?? timeSeries[0];
+  }) || timeSeries[0];
   const inversion = scoreInversion(temperatures);
   const hourlyAnalyses = temperatures.map((temperature, index) => analyzeCloudSeaSample({
     temperature,
@@ -496,6 +493,8 @@ function analyzeDayCloudSea(hourly, start, elevation) {
     timeString: timeSeries[index],
     sunriseTime,
     inversionScore: inversion.score,
+    inversionDetected: inversion.detected,
+    inversionStrength: inversion.strength,
   }));
   const cloudBases = hourlyAnalyses.map((analysis) => analysis.cloudBase);
   const bestHour = hourlyAnalyses.reduce((best, current, index) => {

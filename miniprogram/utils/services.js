@@ -23,6 +23,11 @@ function wxRequest(url, options = {}) {
         success(res) {
           if (res.statusCode >= 200 && res.statusCode < 300) {
             resolve(res.data);
+          } else if (res.statusCode >= 500 && retriesLeft > 0) {
+            console.warn(`服务器错误 ${res.statusCode}，重试中... (${retriesLeft})`, url);
+            setTimeout(() => {
+              attempt(retriesLeft - 1).then(resolve, reject);
+            }, 1000);
           } else {
             reject(new Error(`HTTP ${res.statusCode}`));
           }

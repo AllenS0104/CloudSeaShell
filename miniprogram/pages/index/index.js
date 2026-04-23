@@ -54,6 +54,9 @@ Page({
     fbStars: null,
     fbRating: null,
     fbNote: '',
+    // 折叠状态
+    showHourly: false,
+    showFusion: false,
   },
 
   onLoad() {
@@ -198,13 +201,17 @@ Page({
   },
 
   onMapTap(e) {
-    if (e.detail?.latitude && e.detail?.longitude) {
+    // 微信 map bindtap 可能不返回坐标，仅在有效时处理
+    const lat = e.detail?.latitude;
+    const lon = e.detail?.longitude;
+    if (typeof lat === 'number' && typeof lon === 'number' && 
+        lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
       this.setData({
-        lat: e.detail.latitude,
-        lon: e.detail.longitude,
-        locationName: `${e.detail.latitude.toFixed(2)}, ${e.detail.longitude.toFixed(2)}`,
+        lat,
+        lon,
+        locationName: `${lat.toFixed(2)}, ${lon.toFixed(2)}`,
       });
-      this.fetchAll(e.detail.latitude, e.detail.longitude);
+      this.fetchAll(lat, lon);
     }
   },
 
@@ -266,9 +273,41 @@ Page({
     const hourly = weatherData.hourly;
 
     // Core weather analysis (cloud sea + guidance)
-    const wx = analyzer.analyzeWeather(weatherData, elevation, selectedDayIndex);
-    const { analysis, dayAnalysis, guidance, currentTemp, currentDewGap, hourlyList, sunrise, sunset, current, start } = wx;
+    const weatherResult = analyzer.analyzeWeather(weatherData, elevation, selectedDayIndex);
+    const { analysis, dayAnalysis, guidance, currentTemp, currentDewGap, hourlyList, sunrise, sunset, current, start } = weatherResult;
 
+    // Photography
+    const timeString = current?.time || hourly.time[start];
+    const photoParams = analyzer.buildPhotoParams(timeString, sunrise, sunset, analysis, elevation);
+
+    // Sunset glow
+    const glowAnalysis = analyzer.analyzeGlow(hourly, start, sunrise, sunset);
+
+    // Safety
+    const safetyAlerts = analyzer.buildSafetyAlerts(hourly, start, current, elevation);
+
+    // Stargazing
+    const starInfo = analyzer.analyzeStars(timeString, lat, analysis.cloudCover, analysis.visibility, analysis.humidity, elevation);
+
+    // Hero Card decision
+    const cloudScore = analysis.score || 0;
+    const glowScore = glowAnalysis?.score || 0;
+    const starScore = starInfo?.score || 0;
+
+    let heroCard = null;
+    if (cloudScore >= 70 && glowScore >= 60) {
+      heroCard = { emoji: '🔥', text: '今日大片日！云海+晚霞双绝，必须出发', bgClass: 'hero-epic' };
+    } else if (cloudScore >= 55) {
+      heroCard = { emoji: '☁️', text: '云海有戏，建议守候', bgClass: 'hero-cloud' };
+    } else if (glowScore >= 60) {
+      heroCard = { emoji: '🌅', text: '晚霞概率较高，日落前到位', bgClass: 'hero-glow' };
+    } else if (starScore >= 60) {
+      heroCard = { emoji: '🌌', text: '今晚适合拍银河', bgClass: 'hero-star' };
+    } else {
+      heroCard = { emoji: '😴', text: '今天适合在家修图', bgClass: 'hero-rest' };
+    }
+
+    // Single setData call for all render updates
     this.setData({
       loading: false,
       analysis: {
@@ -290,48 +329,18 @@ Page({
         actionItems: guidance.actionItems,
       },
       currentTemp,
-      currentFeelsLike: dayAnalysis.temperatures.length > 0 ? calc.minOrZero(dayAnalysis.temperatures).toFixed(1) : '--',
+      currentFeelsLike: current ? Number(current.apparent_temperature).toFixed(1) : (dayAnalysis.temperatures.length > 0 ? calc.minOrZero(dayAnalysis.temperatures).toFixed(1) : '--'),
       currentHumidity: current ? Math.round(Number(current.relative_humidity_2m)) : Math.round(calc.maxOrZero(dayAnalysis.humidities)),
       currentWind: current ? Number(current.wind_speed_10m).toFixed(1) : calc.maxOrZero(dayAnalysis.windSpeeds).toFixed(1),
       currentCloudCover: current ? Math.round(calc.getCurrentCloudCover(current)) : Math.round(calc.maxOrZero(dayAnalysis.cloudCover)),
       currentDewGap: currentDewGap.toFixed(1),
       hourlyList,
+      photoParams,
+      glowAnalysis,
+      safetyAlerts,
+      starInfo,
+      heroCard,
     });
-
-    // Photography
-    const timeString = current?.time || hourly.time[start];
-    const photoParams = analyzer.buildPhotoParams(timeString, sunrise, sunset, analysis, elevation);
-    this.setData({ photoParams });
-
-    // Sunset glow
-    this.setData({ glowAnalysis: analyzer.analyzeGlow(hourly, start, sunrise, sunset) });
-
-    // Safety
-    this.setData({ safetyAlerts: analyzer.buildSafetyAlerts(hourly, start, current, elevation) });
-
-    // Stargazing
-    this.setData({
-      starInfo: analyzer.analyzeStars(timeString, lat, analysis.cloudCover, analysis.visibility, analysis.humidity, elevation),
-    });
-
-    // Hero Card decision
-    const cloudScore = analysis.score || 0;
-    const glowScore = this.data.glowAnalysis?.score || 0;
-    const starScore = this.data.starInfo?.score || 0;
-
-    let heroCard = null;
-    if (cloudScore >= 70 && glowScore >= 60) {
-      heroCard = { emoji: '🔥', text: '今日大片日！云海+晚霞双绝，必须出发', bgClass: 'hero-epic' };
-    } else if (cloudScore >= 55) {
-      heroCard = { emoji: '☁️', text: '云海有戏，建议守候', bgClass: 'hero-cloud' };
-    } else if (glowScore >= 60) {
-      heroCard = { emoji: '🌅', text: '晚霞概率较高，日落前到位', bgClass: 'hero-glow' };
-    } else if (starScore >= 60) {
-      heroCard = { emoji: '🌌', text: '今晚适合拍银河', bgClass: 'hero-star' };
-    } else {
-      heroCard = { emoji: '😴', text: '今天适合在家修图', bgClass: 'hero-rest' };
-    }
-    this.setData({ heroCard });
 
     // Auto-save prediction snapshot to feedback
     this.autoSaveFeedback();
@@ -466,5 +475,13 @@ Page({
       console.warn('多模式融合失败:', err.message);
       this.setData({ fusionLoading: false });
     }
+  },
+
+  onToggleHourly() {
+    this.setData({ showHourly: !this.data.showHourly });
+  },
+
+  onToggleFusion() {
+    this.setData({ showFusion: !this.data.showFusion });
   },
 });
