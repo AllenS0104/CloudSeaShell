@@ -1,0 +1,773 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudsea.example/shared/bridge/bridge.schema.json",
+  "title": "CloudSea RN WebView Bridge Protocol",
+  "description": "Versioned request/response schema for CloudSea WebView to React Native bridge actions.",
+  "type": "object",
+  "required": [
+    "protocolVersion",
+    "actions"
+  ],
+  "properties": {
+    "protocolVersion": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Bridge protocol version. Major versions are incompatible; minor and patch versions are backward compatible."
+    },
+    "actions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "location.getCurrentPosition",
+        "share.text",
+        "share.payload",
+        "share.image",
+        "share.poster",
+        "geocode.search",
+        "navigation.map",
+        "map.openWaypointNavigation",
+        "observation.reminder.schedule"
+      ],
+      "properties": {
+        "location.getCurrentPosition": {
+          "$ref": "#/$defs/locationGetCurrentPositionAction"
+        },
+        "share.text": {
+          "$ref": "#/$defs/shareTextAction"
+        },
+        "share.payload": {
+          "$ref": "#/$defs/sharePayloadAction"
+        },
+        "share.image": {
+          "$ref": "#/$defs/shareImageAction"
+        },
+        "geocode.search": {
+          "$ref": "#/$defs/geocodeSearchAction"
+        },
+        "navigation.map": {
+          "$ref": "#/$defs/navigationMapAction"
+        },
+        "observation.reminder.schedule": {
+          "$ref": "#/$defs/observationReminderScheduleAction"
+        },
+        "share.poster": {
+          "$ref": "#/$defs/sharePosterAction"
+        },
+        "map.openWaypointNavigation": {
+          "$ref": "#/$defs/mapOpenWaypointNavigationAction"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "requestEnvelope": {
+      "type": "object",
+      "required": [
+        "requestId",
+        "action",
+        "payload"
+      ],
+      "properties": {
+        "protocolVersion": {
+          "type": "string",
+          "description": "Optional protocol version sent by WebView caller. Legacy callers may send version instead."
+        },
+        "version": {
+          "type": "string",
+          "description": "Legacy request protocol version field retained for backward compatibility."
+        },
+        "channel": {
+          "type": "string",
+          "const": "bridge.request",
+          "description": "React Native WebView message channel."
+        },
+        "requestId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Caller-generated id used to route async success/error callbacks."
+        },
+        "action": {
+          "type": "string",
+          "description": "Stable bridge action string."
+        },
+        "payload": {
+          "type": "object",
+          "description": "Action-specific request payload. Must be an object."
+        }
+      }
+    },
+    "successResponseEnvelope": {
+      "type": "object",
+      "required": [
+        "data"
+      ],
+      "properties": {
+        "protocolVersion": {
+          "type": "string",
+          "description": "Native bridge protocol version used for this response."
+        },
+        "requestId": {
+          "type": "string",
+          "description": "Request id from the original request when transported in an envelope."
+        },
+        "data": {
+          "type": "object",
+          "description": "Action-specific success data passed to onBridgeResponse."
+        }
+      }
+    },
+    "errorResponseEnvelope": {
+      "type": "object",
+      "required": [
+        "code",
+        "message"
+      ],
+      "properties": {
+        "protocolVersion": {
+          "type": "string"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string",
+          "description": "Machine-readable error code, e.g. UNSUPPORTED_ACTION or INVALID_PAYLOAD."
+        },
+        "message": {
+          "type": "string"
+        },
+        "recoverable": {
+          "type": "boolean"
+        },
+        "permissionState": {
+          "type": "string"
+        }
+      }
+    },
+    "locationGetCurrentPositionAction": {
+      "type": "object",
+      "required": [
+        "request",
+        "response"
+      ],
+      "properties": {
+        "request": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/requestEnvelope"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "const": "location.getCurrentPosition"
+                },
+                "payload": {
+                  "type": "object",
+                  "description": "Geolocation options compatible with browser/RN geolocation.",
+                  "additionalProperties": false,
+                  "properties": {
+                    "enableHighAccuracy": {
+                      "type": "boolean"
+                    },
+                    "timeout": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "maximumAge": {
+                      "type": "number",
+                      "minimum": 0
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "response": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/successResponseEnvelope"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "required": [
+                    "coords",
+                    "latitude",
+                    "longitude"
+                  ],
+                  "properties": {
+                    "coords": {
+                      "type": "object",
+                      "required": [
+                        "latitude",
+                        "longitude"
+                      ],
+                      "properties": {
+                        "latitude": {
+                          "type": "number"
+                        },
+                        "longitude": {
+                          "type": "number"
+                        }
+                      }
+                    },
+                    "latitude": {
+                      "type": "number"
+                    },
+                    "longitude": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "error": {
+          "$ref": "#/$defs/errorResponseEnvelope"
+        }
+      }
+    },
+    "shareTextAction": {
+      "type": "object",
+      "required": [
+        "request",
+        "response"
+      ],
+      "properties": {
+        "request": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/requestEnvelope"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "const": "share.text"
+                },
+                "payload": {
+                  "type": "object",
+                  "required": [
+                    "text"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "title": {
+                      "type": "string",
+                      "description": "Optional native share sheet title."
+                    },
+                    "text": {
+                      "type": "string",
+                      "description": "Text message to share."
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "response": {
+          "$ref": "#/$defs/acceptedResponse"
+        },
+        "error": {
+          "$ref": "#/$defs/errorResponseEnvelope"
+        }
+      }
+    },
+    "sharePayloadAction": {
+      "type": "object",
+      "required": [
+        "request",
+        "response"
+      ],
+      "properties": {
+        "request": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/requestEnvelope"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "const": "share.payload"
+                },
+                "payload": {
+                  "type": "object",
+                  "description": "Legacy generic share payload. text or message supplies the native share message.",
+                  "additionalProperties": false,
+                  "properties": {
+                    "title": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "response": {
+          "$ref": "#/$defs/acceptedResponse"
+        },
+        "error": {
+          "$ref": "#/$defs/errorResponseEnvelope"
+        }
+      }
+    },
+    "shareImageAction": {
+      "type": "object",
+      "required": [
+        "request",
+        "response"
+      ],
+      "properties": {
+        "request": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/requestEnvelope"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "const": "share.image"
+                },
+                "payload": {
+                  "type": "object",
+                  "required": [
+                    "dataUrl"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "title": {
+                      "type": "string"
+                    },
+                    "dataUrl": {
+                      "type": "string",
+                      "description": "Data URL for image content to share."
+                    },
+                    "filename": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "response": {
+          "$ref": "#/$defs/acceptedResponse"
+        },
+        "error": {
+          "$ref": "#/$defs/errorResponseEnvelope"
+        }
+      }
+    },
+    "geocodeSearchAction": {
+      "type": "object",
+      "required": [
+        "request",
+        "response"
+      ],
+      "properties": {
+        "request": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/requestEnvelope"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "const": "geocode.search"
+                },
+                "payload": {
+                  "type": "object",
+                  "required": [
+                    "query"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "query": {
+                      "type": "string",
+                      "description": "Search keyword for Open-Meteo geocoding."
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "response": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/successResponseEnvelope"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "required": [
+                    "results"
+                  ],
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "latitude",
+                          "longitude",
+                          "name"
+                        ],
+                        "properties": {
+                          "latitude": {
+                            "type": "number"
+                          },
+                          "longitude": {
+                            "type": "number"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "error": {
+          "$ref": "#/$defs/errorResponseEnvelope"
+        }
+      }
+    },
+    "navigationMapAction": {
+      "type": "object",
+      "required": [
+        "request",
+        "response"
+      ],
+      "properties": {
+        "request": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/requestEnvelope"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "const": "navigation.map"
+                },
+                "payload": {
+                  "type": "object",
+                  "required": [
+                    "latitude",
+                    "longitude"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "latitude": {
+                      "type": "number"
+                    },
+                    "longitude": {
+                      "type": "number"
+                    },
+                    "label": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "response": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/successResponseEnvelope"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "required": [
+                    "opened"
+                  ],
+                  "properties": {
+                    "opened": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "error": {
+          "$ref": "#/$defs/errorResponseEnvelope"
+        }
+      }
+    },
+    "observationReminderScheduleAction": {
+      "type": "object",
+      "required": [
+        "request",
+        "response"
+      ],
+      "properties": {
+        "request": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/requestEnvelope"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "const": "observation.reminder.schedule"
+                },
+                "payload": {
+                  "type": "object",
+                  "required": [
+                    "reminderId",
+                    "fireAt"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "reminderId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "body": {
+                      "type": "string"
+                    },
+                    "fireAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "timezone": {
+                      "type": "string"
+                    },
+                    "location": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "latitude": {
+                          "type": "number"
+                        },
+                        "longitude": {
+                          "type": "number"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "response": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/successResponseEnvelope"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "required": [
+                    "scheduled",
+                    "reminderId",
+                    "fireAt",
+                    "transport"
+                  ],
+                  "properties": {
+                    "scheduled": {
+                      "type": "boolean"
+                    },
+                    "reminderId": {
+                      "type": "string"
+                    },
+                    "fireAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "transport": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "error": {
+          "$ref": "#/$defs/errorResponseEnvelope"
+        }
+      }
+    },
+    "acceptedResponse": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/successResponseEnvelope"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "required": [
+                "accepted"
+              ],
+              "properties": {
+                "accepted": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "sharePosterAction": {
+      "type": "object",
+      "required": [
+        "request",
+        "response"
+      ],
+      "properties": {
+        "request": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/requestEnvelope"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "const": "share.poster"
+                },
+                "payload": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "base64Png": {
+                      "type": "string",
+                      "description": "Base64-encoded PNG image without data URL prefix."
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "response": {
+          "$ref": "#/$defs/acceptedResponse"
+        },
+        "error": {
+          "$ref": "#/$defs/errorResponseEnvelope"
+        }
+      }
+    },
+    "mapOpenWaypointNavigationAction": {
+      "type": "object",
+      "required": [
+        "request",
+        "response"
+      ],
+      "properties": {
+        "request": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/requestEnvelope"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "const": "map.openWaypointNavigation"
+                },
+                "payload": {
+                  "type": "object",
+                  "required": [
+                    "name",
+                    "lat",
+                    "lng"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "lat": {
+                      "type": "number"
+                    },
+                    "lng": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "response": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/successResponseEnvelope"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "data": {
+                  "type": "object",
+                  "required": [
+                    "opened"
+                  ],
+                  "properties": {
+                    "opened": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "error": {
+          "$ref": "#/$defs/errorResponseEnvelope"
+        }
+      }
+    }
+  }
+}

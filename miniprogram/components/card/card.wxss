@@ -1,0 +1,13 @@
+@import "../../styles/tokens.wxss";
+
+.cs-card {
+  background: var(--color-bg-card);
+  border: 1rpx solid var(--color-border-default);
+  border-radius: var(--radius-xl);
+  padding: 30rpx;
+  margin-bottom: 20rpx;
+  backdrop-filter: blur(10px);
+}
+
+.cs-card--compact { padding: 20rpx; }
+.cs-card--flush { margin-bottom: 0; }

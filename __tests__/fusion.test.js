@@ -1,26 +1,7 @@
 /**
  * Tests for fusion.js — multi-model weather fusion
  */
-const fs = require('fs');
-const path = require('path');
-
-// Load fusion module (needs calc dependency)
-const calcSrc = fs.readFileSync(path.join(__dirname, '..', 'miniprogram', 'utils', 'calculations.js'), 'utf-8');
-const fusionSrc = fs.readFileSync(path.join(__dirname, '..', 'miniprogram', 'utils', 'fusion.js'), 'utf-8');
-
-// Build calc module first
-const calcCjs = calcSrc.replace(/^module\.exports\s*=\s*\{[\s\S]*?\};?\s*$/m, '');
-const calcMod = new Function(`${calcCjs}\nreturn { analyzeDayCloudSea, scoreToConfidence };`)();
-
-// Build fusion module (mock wx and require)
-const fusionCjs = fusionSrc
-  .replace(/^const calc = require.*$/m, '')
-  .replace(/^module\.exports\s*=\s*\{[\s\S]*?\};?\s*$/m, '')
-  .replace(/\bwx\./g, 'mockWx.')
-  .replace(/\bcalc\./g, 'calcMod.');
-
-const mockWx = { request: () => {} };
-const fusionMod = new Function('calcMod', 'mockWx', `${fusionCjs}\nreturn { fuseModelPredictions, MODELS };`)(calcMod, mockWx);
+const fusionMod = require('../miniprogram/utils/fusion');
 
 // ─── Mock weather data ──────────────────────────────────────
 

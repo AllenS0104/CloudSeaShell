@@ -7,7 +7,14 @@
     "ios": "react-native run-ios",
     "lint": "eslint .",
     "start": "react-native start",
-    "test": "jest"
+    "test": "jest --runInBand",
+    "test:coverage": "jest --coverage --runInBand",
+    "build:web": "node web/build.js",
+    "build:tokens": "node shared/design/build.js",
+    "build:rn-tokens": "node scripts/build-rn-tokens.js",
+    "verify:assets": "node scripts/verify-assets.js",
+    "sync:shared": "node scripts/sync-shared.js",
+    "validate:waypoints": "node scripts/validate-waypoints.js"
   },
   "dependencies": {
     "react": "19.1.0",

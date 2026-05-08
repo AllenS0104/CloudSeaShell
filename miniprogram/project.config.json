@@ -1,7 +1,7 @@
 {
   "description": "项目配置文件",
   "setting": {
-    "urlCheck": false,
+    "urlCheck": true,
     "es6": true,
     "enhance": true,
     "postcss": true,
@@ -12,7 +12,7 @@
     "checkSiteMap": false,
     "compileWorklet": false,
     "uglifyFileName": false,
-    "uploadWithSourceMap": true,
+    "uploadWithSourceMap": false,
     "packNpmManually": false,
     "packNpmRelationList": [],
     "minifyWXSS": true,
@@ -34,7 +34,12 @@
   "appid": "wxfa59a10a592cb039",
   "simulatorPluginLibVersion": {},
   "packOptions": {
-    "ignore": [],
+    "ignore": [
+      {
+        "value": "utils/tests",
+        "type": "folder"
+      }
+    ],
     "include": []
   },
   "editorSetting": {},

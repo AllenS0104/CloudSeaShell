@@ -1,0 +1,37 @@
+@import "../../styles/tokens.wxss";
+
+.cs-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--color-bg-card);
+  border: 1rpx solid var(--color-border-default);
+  border-radius: var(--radius-xl);
+  padding: 80rpx 40rpx;
+  margin-top: 40rpx;
+  text-align: center;
+  backdrop-filter: blur(10px);
+}
+.cs-empty-state__icon { font-size: 80rpx; margin-bottom: 24rpx; }
+.cs-empty-state__title {
+  font-size: var(--font-lg);
+  font-weight: 600;
+  color: var(--color-text-strong);
+  margin-bottom: 12rpx;
+}
+.cs-empty-state__hint {
+  font-size: 26rpx;
+  color: var(--color-text-secondary);
+  margin-bottom: 32rpx;
+}
+.cs-pill-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-md) 48rpx;
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  color: var(--color-white);
+  font-size: var(--font-md);
+  font-weight: 500;
+}

@@ -1,0 +1,4 @@
+<view class="cs-section-header custom-class">
+  <view wx:if="{{eyebrow}}" class="cs-section-header__eyebrow">{{eyebrow}}</view>
+  <view class="cs-section-header__title">{{title}}</view>
+</view>

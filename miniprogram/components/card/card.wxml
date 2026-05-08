@@ -1,0 +1,3 @@
+<view class="cs-card cs-card--{{variant}} custom-class">
+  <slot></slot>
+</view>

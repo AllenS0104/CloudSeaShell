@@ -1,0 +1,93 @@
+name: 新增机位
+description: 提交一个可公开分享的云海、星空、日出或日落机位
+labels: [waypoint]
+body:
+  - type: input
+    id: id
+    attributes:
+      label: id
+      description: 小写 kebab-case 唯一标识，例如 niubei-shan
+      placeholder: example-mountain
+    validations:
+      required: true
+  - type: input
+    id: name
+    attributes:
+      label: name
+      description: 公开通用地名或观景点名称
+    validations:
+      required: true
+  - type: input
+    id: lat
+    attributes:
+      label: lat
+      description: WGS84 十进制度纬度（-90 到 90）
+      placeholder: '29.8039'
+    validations:
+      required: true
+  - type: input
+    id: lng
+    attributes:
+      label: lng
+      description: WGS84 十进制度经度（-180 到 180）
+      placeholder: '102.4449'
+    validations:
+      required: true
+  - type: input
+    id: elevation
+    attributes:
+      label: elevation
+      description: 海拔，单位米
+      placeholder: '3666'
+    validations:
+      required: true
+  - type: dropdown
+    id: bestFor
+    attributes:
+      label: bestFor
+      description: 可多选
+      multiple: true
+      options:
+        - cloudsea
+        - stargazing
+        - sunset
+        - sunrise
+    validations:
+      required: true
+  - type: input
+    id: bestSeasons
+    attributes:
+      label: bestSeasons
+      description: 推荐季节，逗号分隔，例如 秋,冬,春
+    validations:
+      required: true
+  - type: input
+    id: suggestedDirection
+    attributes:
+      label: suggestedDirection
+      description: 建议朝向角度，0 北 / 90 东 / 180 南 / 270 西
+      placeholder: '90'
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: notes
+      description: 拍摄亮点、天气窗口、安全提醒
+    validations:
+      required: true
+  - type: input
+    id: bortleClass
+    attributes:
+      label: bortleClass
+      description: Bortle 暗空等级，1-9
+      placeholder: '3'
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: 来源说明
+      description: 请提供公开资料链接、地图来源或个人实地经验说明；不要提交军事/敏感/禁入区域。
+    validations:
+      required: true

@@ -1,0 +1,8 @@
+<view class="cs-empty-state custom-class">
+  <text wx:if="{{icon}}" class="cs-empty-state__icon">{{icon}}</text>
+  <text class="cs-empty-state__title">{{title}}</text>
+  <text wx:if="{{hint}}" class="cs-empty-state__hint">{{hint}}</text>
+  <view wx:if="{{buttonText}}" class="cs-pill-button" bindtap="onAction" aria-role="button" aria-label="{{buttonText}}">
+    <text>{{buttonText}}</text>
+  </view>
+</view>

@@ -1,0 +1,107 @@
+name: Mini Program CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-and-validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Validate waypoints
+        run: npm run validate:waypoints
+
+      - name: Run unit tests
+        run: npx jest __tests__/ --verbose
+
+      - name: Lint - check for console.log in production code
+        run: |
+          echo "Checking for console.log in miniprogram source..."
+          FOUND=$(grep -rn "console\.log" miniprogram/utils/ miniprogram/pages/ miniprogram/app.js --include="*.js" || true)
+          if [ -n "$FOUND" ]; then
+            echo "⚠️  console.log found in production code:"
+            echo "$FOUND"
+            echo ""
+            echo "Consider removing console.log statements before release."
+          else
+            echo "✅ No console.log found in production code."
+          fi
+
+      - name: Validate JSON files
+        run: |
+          echo "Validating JSON files..."
+          ERRORS=0
+          for f in miniprogram/app.json miniprogram/project.config.json miniprogram/sitemap.json; do
+            if [ -f "$f" ]; then
+              if node -e "JSON.parse(require('fs').readFileSync('$f','utf8'))" 2>/dev/null; then
+                echo "✅ $f is valid JSON"
+              else
+                echo "❌ $f is invalid JSON"
+                ERRORS=1
+              fi
+            else
+              echo "⚠️  $f not found"
+            fi
+          done
+          # Also validate page-level JSON
+          for f in $(find miniprogram/pages -name "*.json" 2>/dev/null); do
+            if node -e "JSON.parse(require('fs').readFileSync('$f','utf8'))" 2>/dev/null; then
+              echo "✅ $f is valid JSON"
+            else
+              echo "❌ $f is invalid JSON"
+              ERRORS=1
+            fi
+          done
+          if [ "$ERRORS" -eq 1 ]; then
+            exit 1
+          fi
+
+  assets-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web assets
+        run: npm run build:web
+
+      - name: Copy build metadata to Android assets
+        run: |
+          node -e "const fs=require('fs'); const path=require('path'); const src=path.join('web','dist','build-info.json'); const destDir=path.join('android','app','src','main','assets','weather-cloud-forecast-app'); fs.mkdirSync(destDir,{recursive:true}); fs.copyFileSync(src,path.join(destDir,'build-info.json'));"
+
+      - name: Verify Android assets metadata
+        run: npm run verify:assets
+
+      - name: Upload build metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-build-info
+          path: web/dist/build-info.json

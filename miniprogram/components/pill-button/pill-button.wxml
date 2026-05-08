@@ -1,0 +1,4 @@
+<view class="cs-pill-button cs-pill-button--{{variant}} custom-class" bindtap="onTap" aria-role="button" aria-label="{{label}}">
+  <text wx:if="{{icon}}" class="cs-pill-button__icon">{{icon}}</text>
+  <text>{{label}}</text>
+</view>

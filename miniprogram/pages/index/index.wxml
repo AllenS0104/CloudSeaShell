@@ -1,6 +1,6 @@
 <view class="page-container">
   <!-- Header -->
-  <view class="card header">
+  <cs-card custom-class="header">
     <view class="header-eyebrow">CLOUD SEA FORECAST LAB</view>
     <view class="header-title">云海观测决策台</view>
     <view class="header-subtitle">面向摄影、徒步与山地观测的专业天气研判工具</view>
@@ -40,7 +40,7 @@
         </view>
       </view>
     </view>
-  </view>
+  </cs-card>
 
   <!-- Status Banner -->
   <view wx:if="{{statusText}}" class="status-banner status-{{statusType}}">{{statusText}}</view>
@@ -104,8 +104,33 @@
         latitude="{{lat}}" longitude="{{lon}}"
         scale="10" show-location
         markers="{{markers}}"
-        bindtap="onMapTap">
+        bindtap="onMapTap"
+        bindmarkertap="onWaypointMarkerTap">
       </map>
+
+      <view class="waypoint-direction" wx:if="{{primaryDirection}}">
+        <image class="waypoint-compass" src="{{primaryDirection.compassSvgDataUri}}" mode="widthFix"></image>
+        <text>建议拍摄方向: {{primaryDirection.label}} ({{primaryDirection.deg}}°)</text>
+      </view>
+
+      <view class="waypoint-card" wx:if="{{selectedWaypoint}}">
+        <view class="waypoint-card-header">
+          <view>
+            <view class="waypoint-name">📸 {{selectedWaypoint.name}}</view>
+            <view class="waypoint-meta">{{selectedWaypoint.elevation}}m · {{selectedWaypoint.distanceKm}}km · {{selectedWaypoint.bestForText}}</view>
+          </view>
+          <button class="waypoint-nav-btn" size="mini" bindtap="onOpenWaypointNavigation">导航</button>
+        </view>
+        <view class="waypoint-direction waypoint-direction-inline" wx:if="{{selectedWaypoint.direction}}">
+          <image class="waypoint-compass" src="{{selectedWaypoint.direction.compassSvgDataUri}}" mode="widthFix"></image>
+          <text>建议拍摄方向: {{selectedWaypoint.direction.label}} ({{selectedWaypoint.direction.deg}}°)</text>
+        </view>
+        <view class="waypoint-tags">
+          <text wx:for="{{selectedWaypoint.bestForLabels}}" wx:key="*this" class="waypoint-tag">{{item}}</text>
+          <text class="waypoint-tag waypoint-tag-night">{{selectedWaypoint.lightPollution.label}}</text>
+        </view>
+        <view class="waypoint-notes">{{selectedWaypoint.notes}}</view>
+      </view>
 
       <!-- Weather Stats -->
       <view class="weather-main">
@@ -159,6 +184,11 @@
       </view>
 
       <view class="forecast-summary">{{analysis.summary}}</view>
+
+      <view style="text-align:center;margin:20rpx 0 8rpx;display:flex;gap:16rpx;justify-content:center;flex-wrap:wrap;">
+        <cs-pill-button label="生成海报" icon="🖼️" variant="ghost" bind:tap="onSharePosterTap" />
+        <cs-pill-button label="开启提醒" icon="🔔" variant="ghost" bind:tap="onEnableObservationReminder" />
+      </view>
 
       <view class="forecast-reasons">
         <view wx:for="{{analysis.reasons}}" wx:key="index" class="reason-item">{{item}}</view>
@@ -227,6 +257,10 @@
         <view class="stat-card" wx:if="{{starInfo.milkyWay.coreVisible}}">
           <text class="stat-icon">🕐</text>
           <view><view class="stat-label">最佳时段</view><view class="stat-value">{{starInfo.milkyWay.bestHours}}</view></view>
+        </view>
+        <view class="stat-card" wx:if="{{lightPollution}}">
+          <text class="stat-icon">🌃</text>
+          <view><view class="stat-label">光污染</view><view class="stat-value">{{lightPollution.label}}</view></view>
         </view>
       </view>
 
@@ -825,4 +859,6 @@
       </scroll-view>
     </view>
   </view>
+
+  <canvas type="2d" id="poster-canvas" style="position:fixed;left:-9999px;top:-9999px;width:750px;height:1334px;"></canvas>
 </view>

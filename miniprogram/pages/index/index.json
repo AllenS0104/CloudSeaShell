@@ -1,3 +1,6 @@
 {
-  "usingComponents": {}
+  "usingComponents": {
+    "cs-card": "/components/card/card",
+    "cs-pill-button": "/components/pill-button/pill-button"
+  }
 }

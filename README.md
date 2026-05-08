@@ -95,3 +95,7 @@ To learn more about React Native, take a look at the following resources:
 - [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
 - [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
 - [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+
+# Design Tokens
+
+CloudSea 的 Web 与小程序视觉变量以 `shared/design/tokens.json` 为 source of truth。新增颜色禁止硬编码，统一使用 `var(--color-primary)`、`var(--color-text-strong)`、`var(--color-text-weak)`、`var(--color-border-default)` 等 token；新增或调整 token 后运行 `npm run build:tokens` 生成 `tokens.css` / `tokens.wxss`。

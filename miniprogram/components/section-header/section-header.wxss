@@ -1,0 +1,14 @@
+@import "../../styles/tokens.wxss";
+
+.cs-section-header { margin: 30rpx 0 16rpx; }
+.cs-section-header__eyebrow {
+  font-size: var(--font-xs);
+  color: var(--color-text-secondary);
+  letter-spacing: 3rpx;
+  text-transform: uppercase;
+}
+.cs-section-header__title {
+  font-size: var(--font-lg);
+  font-weight: 600;
+  color: var(--color-text-strong);
+}

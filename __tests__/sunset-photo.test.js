@@ -2,14 +2,7 @@
  * Tests for sunset.js glow prediction module
  */
 
-const fs = require('fs');
-const path = require('path');
-
-const srcPath = path.join(__dirname, '..', 'miniprogram', 'utils', 'sunset.js');
-const src = fs.readFileSync(srcPath, 'utf-8');
-const cjs = src.replace(/^module\.exports\s*=\s*\{[\s\S]*?\};?\s*$/m, '');
-const wrapped = `${cjs}\nreturn { analyzeGlowSample, analyzeDayGlow };`;
-const mod = new Function(wrapped)();
+const mod = require('../miniprogram/utils/sunset');
 
 describe('analyzeGlowSample', () => {
   const idealSunset = {
@@ -63,10 +56,7 @@ describe('analyzeGlowSample', () => {
 });
 
 describe('photography timeline & ND', () => {
-  const photoPath = path.join(__dirname, '..', 'miniprogram', 'utils', 'photography.js');
-  const photoSrc = fs.readFileSync(photoPath, 'utf-8');
-  const photoCjs = photoSrc.replace(/^module\.exports\s*=\s*\{[\s\S]*?\};?\s*$/m, '');
-  const photoMod = new Function(`${photoCjs}\nreturn { getLightingPhase, generatePhotoRecommendations };`)();
+  const photoMod = require('../miniprogram/utils/photography');
 
   test('golden sunrise detected correctly', () => {
     const r = photoMod.getLightingPhase('2026-04-20T05:35:00', '2026-04-20T05:30:00', '2026-04-20T18:15:00');

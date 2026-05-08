@@ -1,0 +1,7 @@
+<view class="cs-stat-tile cs-stat-tile--{{variant}} custom-class">
+  <text wx:if="{{icon}}" class="cs-stat-tile__icon">{{icon}}</text>
+  <view class="cs-stat-tile__body">
+    <view class="cs-stat-tile__label">{{label}}</view>
+    <view class="cs-stat-tile__value {{strong ? 'cs-stat-tile__value--strong' : ''}}">{{value}}</view>
+  </view>
+</view>

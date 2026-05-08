@@ -1,8 +1,5 @@
 package com.cloudseashell.app
 
-import android.app.AlarmManager
-import android.app.PendingIntent
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.core.content.FileProvider
@@ -31,24 +28,13 @@ class CloudSeaCapabilitiesModule(private val reactContext: ReactApplicationConte
       val locationName = payload.getString("locationName") ?: "当前地点"
       val triggerAtMillis = java.time.Instant.parse(fireAt).toEpochMilli()
 
-      val intent = Intent(reactContext, ObservationReminderReceiver::class.java).apply {
-        putExtra(ObservationReminderReceiver.EXTRA_TITLE, title)
-        putExtra(ObservationReminderReceiver.EXTRA_BODY, body)
-        putExtra(ObservationReminderReceiver.EXTRA_LOCATION_NAME, locationName)
-        putExtra(ObservationReminderReceiver.EXTRA_REMINDER_ID, reminderId)
-      }
-      val pendingIntent = PendingIntent.getBroadcast(
-        reactContext,
-        reminderId.hashCode(),
-        intent,
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-      )
-
-      val alarmManager = reactContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-      alarmManager.setAndAllowWhileIdle(
-        AlarmManager.RTC_WAKEUP,
-        triggerAtMillis,
-        pendingIntent,
+      LocalNotificationScheduler.schedule(
+        context = reactContext,
+        id = reminderId,
+        title = title,
+        body = body,
+        triggerAtMs = triggerAtMillis,
+        locationName = locationName,
       )
 
       val result = Arguments.createMap().apply {

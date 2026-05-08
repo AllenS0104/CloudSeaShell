@@ -105,7 +105,7 @@ function fuseModelPredictions(modelResults, elevation, dayIndex = 0) {
 
   for (const result of modelResults) {
     try {
-      const analysis = calc.analyzeDayCloudSea(result.data.hourly, start, elevation);
+      const analysis = calc.analyzeDayCloudSea(result.data.hourly, start, elevation, result.data.daily?.sunrise?.[dayIndex]);
       analyses.push({
         modelName: result.model.name,
         modelWeight: result.model.weight,

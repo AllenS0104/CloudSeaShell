@@ -7,7 +7,10 @@ import com.facebook.react.uimanager.ViewManager
 
 class CloudSeaCapabilitiesPackage : ReactPackage {
   override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> =
-      listOf(CloudSeaCapabilitiesModule(reactContext))
+      listOf(
+        CloudSeaCapabilitiesModule(reactContext),
+        LocalNotificationsModule(reactContext),
+      )
 
   override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =
       emptyList()

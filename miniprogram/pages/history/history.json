@@ -1,4 +1,6 @@
 {
-  "usingComponents": {},
+  "usingComponents": {
+    "empty-state": "/components/empty-state/empty-state"
+  },
   "navigationBarTitleText": "观测历史"
 }

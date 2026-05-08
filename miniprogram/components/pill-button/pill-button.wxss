@@ -1,0 +1,22 @@
+@import "../../styles/tokens.wxss";
+
+.cs-pill-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  padding: var(--spacing-md) var(--spacing-xl);
+  border-radius: var(--radius-md);
+  border: 1rpx solid transparent;
+  background: var(--color-primary);
+  color: var(--color-white);
+  font-size: var(--font-md);
+  font-weight: 500;
+}
+.cs-pill-button--ghost {
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary-border);
+}
+.cs-pill-button--success { background: var(--color-success); }
+.cs-pill-button__icon { font-size: var(--font-md); }

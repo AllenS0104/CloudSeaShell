@@ -1,5 +1,14 @@
-const BRIDGE_PROTOCOL_VERSION = '1.0';
+const BRIDGE_PROTOCOL_VERSION = '1.0.0';
 const DEFAULT_BRIDGE_TIMEOUT = 15000;
+const BRIDGE_ACTIONS = Object.freeze({
+  LocationGetCurrentPosition: 'location.getCurrentPosition',
+  ShareText: 'share.text',
+  SharePayload: 'share.payload',
+  ShareImage: 'share.image',
+  GeocodeSearch: 'geocode.search',
+  NavigationMap: 'navigation.map',
+  ObservationReminderSchedule: 'observation.reminder.schedule',
+});
 
 let requestSequence = 0;
 const pendingRequests = new Map();
@@ -13,6 +22,7 @@ let lastBridgeInfo = {
   platform: 'web',
   ready: false,
   capabilities: [],
+  supportedActions: [],
   supportsRequest: false,
 };
 
@@ -128,6 +138,11 @@ function inferLegacyCapabilities(bridge) {
   return capabilities;
 }
 
+function normalizeStringArray(value) {
+  const parsed = parseBridgeValue(value);
+  return Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string') : [];
+}
+
 function normalizeCapabilities(rawCapabilities, bridge) {
   const parsed = parseBridgeValue(rawCapabilities);
   const values = Array.isArray(parsed)
@@ -238,6 +253,7 @@ function buildBridgeInfo(bridge, injectedBridgeInfo) {
       platform: 'web',
       ready: false,
       capabilities: [],
+      supportedActions: [],
       supportsRequest: false,
     };
   }
@@ -262,6 +278,7 @@ function buildBridgeInfo(bridge, injectedBridgeInfo) {
   const ready = typeof injectedBridgeInfo?.ready === 'boolean'
     ? injectedBridgeInfo.ready
     : available;
+  const supportedActions = normalizeStringArray(injectedBridgeInfo?.supportedActions);
 
   return {
     available: true,
@@ -271,6 +288,7 @@ function buildBridgeInfo(bridge, injectedBridgeInfo) {
     platform: detectPlatform(transport, injectedBridgeInfo),
     ready,
     capabilities,
+    supportedActions,
     supportsRequest: typeof bridge?.request === 'function' || hasRnTransport,
     appName: injectedBridgeInfo?.appName || null,
     appVersion: injectedBridgeInfo?.appVersion || null,
@@ -322,6 +340,20 @@ export async function getBridgeInfo(options = {}) {
 
 export function hasBridgeCapability(bridgeInfo, capability) {
   return Boolean(bridgeInfo?.capabilities?.includes(capability));
+}
+
+export function getProtocolVersion() {
+  return buildBridgeInfo(getAndroidBridge(undefined), getInjectedBridgeInfo()).protocolVersion;
+}
+
+export function getSupportedActions(bridgeInfo = null) {
+  const info = bridgeInfo || buildBridgeInfo(getAndroidBridge(undefined), getInjectedBridgeInfo());
+  return normalizeStringArray(info.supportedActions);
+}
+
+export function hasBridgeActionSupport(bridgeInfo, action) {
+  const supportedActions = getSupportedActions(bridgeInfo);
+  return supportedActions.length === 0 || supportedActions.includes(action);
 }
 
 export function isNativeShell(bridgeInfo = null) {
@@ -416,10 +448,16 @@ export function invokeBridgeRequest({
     return Promise.reject(new Error('原生桥接暂不支持请求协议'));
   }
 
+  const bridgeInfo = buildBridgeInfo(bridge, getInjectedBridgeInfo());
+  if (!hasBridgeActionSupport(bridgeInfo, action)) {
+    return Promise.reject(new Error(`当前 App 不支持 ${action}，请升级 App 后重试`));
+  }
+
   installBridgeGlobals();
 
   const requestId = createRequestId();
   const request = {
+    protocolVersion: BRIDGE_PROTOCOL_VERSION,
     version: BRIDGE_PROTOCOL_VERSION,
     requestId,
     action,
@@ -612,6 +650,10 @@ export function waitForAndroidBridge(methodName, options = {}) {
 function createCloudSeaBridgeFacade() {
   return {
     protocolVersion: BRIDGE_PROTOCOL_VERSION,
+    actions: BRIDGE_ACTIONS,
+    getProtocolVersion,
+    getSupportedActions,
+    supportsAction: async (action) => hasBridgeActionSupport(await getBridgeInfo({ timeout: 0 }), action),
     getInfo: (options) => getBridgeInfo(options),
     refreshInfo: (options) => getBridgeInfo(options),
     isReady: () => isBridgeReady(),

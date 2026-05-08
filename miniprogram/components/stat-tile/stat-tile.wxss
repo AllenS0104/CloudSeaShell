@@ -1,0 +1,22 @@
+@import "../../styles/tokens.wxss";
+
+.cs-stat-tile {
+  flex: 1;
+  min-width: 200rpx;
+  background: var(--color-bg-dark);
+  padding: 20rpx;
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+.cs-stat-tile--stack {
+  min-width: 140rpx;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+}
+.cs-stat-tile__icon { font-size: 36rpx; }
+.cs-stat-tile__label { font-size: 22rpx; color: var(--color-text-secondary); }
+.cs-stat-tile__value { font-size: var(--font-md); font-weight: 500; color: var(--color-text); }
+.cs-stat-tile__value--strong { font-size: var(--font-xl); font-weight: 700; color: var(--color-text-strong); }

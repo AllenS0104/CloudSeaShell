@@ -6,7 +6,7 @@
       <text class="history-title">📊 观测历史</text>
       <text class="history-subtitle">预测记录与准确性趋势</text>
     </view>
-    <view class="export-btn" bindtap="onExportCSV">
+    <view class="export-btn" bindtap="onExportCSV" aria-role="button" aria-label="导出CSV数据">
       <text class="export-icon">📋</text>
       <text class="export-label">导出</text>
     </view>
@@ -39,14 +39,7 @@
   </view>
 
   <!-- Empty State -->
-  <view wx:if="{{isEmpty}}" class="card empty-state">
-    <text class="empty-icon">🔭</text>
-    <text class="empty-text">暂无观测记录</text>
-    <text class="empty-hint">去首页查看预测吧</text>
-    <view class="empty-btn" bindtap="onGoHome">
-      <text>返回首页</text>
-    </view>
-  </view>
+  <empty-state wx:if="{{isEmpty}}" icon="🔭" title="暂无观测记录" hint="去首页查看预测吧" button-text="返回首页" bind:action="onGoHome" />
 
   <!-- Records List -->
   <view wx:if="{{!isEmpty}}" class="records-list">
