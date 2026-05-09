@@ -15,7 +15,7 @@ class LocalNotificationsModule(private val reactContext: ReactApplicationContext
   fun scheduleLocalNotification(id: String, title: String, body: String, triggerAtMs: Double, promise: Promise) {
     try {
       require(id.isNotBlank()) { "id missing" }
-      LocalNotificationScheduler.schedule(
+      val transport = LocalNotificationScheduler.schedule(
         context = reactContext,
         id = id,
         title = title.ifBlank { "云海观测提醒" },
@@ -27,7 +27,7 @@ class LocalNotificationsModule(private val reactContext: ReactApplicationContext
         putBoolean("scheduled", true)
         putString("id", id)
         putDouble("triggerAtMs", triggerAtMs)
-        putString("transport", "android-local-notification")
+        putString("transport", transport)
       }
       promise.resolve(result)
     } catch (error: Exception) {

@@ -85,6 +85,9 @@ function scheduleSubscribeMessage({ templateKey, data, fireAt, locationName }) {
   const pending = readList(PENDING_KEY).filter(existing => existing.id !== item.id);
   pending.push(item);
   pending.sort((left, right) => new Date(left.fireAt).getTime() - new Date(right.fireAt).getTime());
+  if (pending.length > 50) {
+    pending.length = 50;
+  }
   writeList(PENDING_KEY, pending);
   console.info('[subscribe-message] scheduled', item);
   return item;

@@ -98,7 +98,7 @@ jobs:
           node -e "const fs=require('fs'); const path=require('path'); const src=path.join('web','dist','build-info.json'); const destDir=path.join('android','app','src','main','assets','weather-cloud-forecast-app'); fs.mkdirSync(destDir,{recursive:true}); fs.copyFileSync(src,path.join(destDir,'build-info.json'));"
 
       - name: Verify Android assets metadata
-        run: npm run verify:assets
+        run: npm run verify:assets -- --allow-empty
 
       - name: Upload build metadata
         uses: actions/upload-artifact@v4

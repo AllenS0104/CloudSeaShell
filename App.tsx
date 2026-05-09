@@ -362,12 +362,15 @@ export async function handleBridgeRequest(
                 body || `${locationName} 已到观测提醒时间。`,
                 triggerAtMs,
               );
+              if (nativeResult?.transport === 'inexact-fallback') {
+                console.warn('Exact alarm unavailable; scheduled notification with inexact fallback.');
+              }
               respondSuccess(requestId, {
                 ...(nativeResult || {}),
                 scheduled: true,
                 reminderId,
                 fireAt,
-                transport: nativeResult?.transport || 'android-local-notification',
+                transport: nativeResult?.transport || 'exact-alarm',
               });
               return;
             }
@@ -414,7 +417,7 @@ function App(): React.JSX.Element {
   const [canGoBack, setCanGoBack] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [webviewError, setWebviewError] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
+  const [reloadKey, setReloadKey] = useState(false);
   const [appState, setAppState] = useState(AppState.currentState);
   const reminderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const remindersRef = useRef<ScheduledReminder[]>([]);
@@ -539,7 +542,7 @@ function App(): React.JSX.Element {
             style={styles.retryButton}
             onPress={() => {
               setWebviewError(null);
-              setReloadKey((key) => key + 1);
+              setReloadKey((key) => !key);
             }}
           >
             <Text style={styles.retryButtonText}>重新加载</Text>
@@ -548,7 +551,7 @@ function App(): React.JSX.Element {
         </View>
       ) : (
         <WebView
-          key={reloadKey}
+          key={String(reloadKey)}
           ref={webViewRef}
           source={{ uri: CLOUDSEA_WEB_URL }}
           style={styles.container}

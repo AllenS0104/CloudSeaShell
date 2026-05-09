@@ -41,6 +41,28 @@ describe('Bridge action dispatch', () => {
     expect(deps.respondSuccess).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['null', null],
+    ['string', 'string'],
+    ['array', []],
+    ['undefined', undefined],
+  ])('非对象 payload: %s 返回 INVALID_PAYLOAD', async (label, payload) => {
+    const deps = makeDeps();
+    const request = {
+      requestId: `req-invalid-${label}`,
+      action: 'share.payload',
+      payload,
+    } as Parameters<typeof handleBridgeRequest>[0];
+
+    await handleBridgeRequest(request, deps);
+
+    expect(deps.respondError).toHaveBeenCalledWith(
+      `req-invalid-${label}`,
+      expect.objectContaining({ code: 'INVALID_PAYLOAD' }),
+    );
+    expect(deps.respondSuccess).not.toHaveBeenCalled();
+  });
+
   it('observation.reminder.schedule 参数无效返回 INVALID_REMINDER', async () => {
     const deps = makeDeps();
 
