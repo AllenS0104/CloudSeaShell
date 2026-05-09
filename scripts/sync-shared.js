@@ -43,6 +43,10 @@ function sharedBody(source) {
 function copyWaypointData() {
   const sourceDir = path.join(ROOT, 'shared', 'data', 'waypoints');
   const files = ['index.json', 'schema.json', 'CONTRIBUTING.md'];
+  const jsonContent = fs.readFileSync(path.join(sourceDir, 'index.json'), 'utf8');
+  const wrapperJs =
+    GENERATED_HEADER +
+    'module.exports = ' + jsonContent.trimEnd() + ';\n';
   for (const targetDir of WAYPOINT_DATA_TARGETS) {
     fs.mkdirSync(targetDir, { recursive: true });
     for (const file of files) {
@@ -51,6 +55,10 @@ function copyWaypointData() {
       fs.copyFileSync(sourcePath, targetPath);
       console.log(`synced ${path.relative(ROOT, sourcePath)} -> ${path.relative(ROOT, targetPath)}`);
     }
+    // WeChat 小程序不支持 require('*.json')，生成 .js 包装
+    const wrapperPath = path.join(targetDir, 'index.js');
+    fs.writeFileSync(wrapperPath, wrapperJs, 'utf8');
+    console.log(`generated ${path.relative(ROOT, wrapperPath)} (json wrapper)`);
   }
 }
 

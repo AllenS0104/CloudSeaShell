@@ -11,7 +11,8 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function(root) {
   function loadBundledWaypoints() {
     if (typeof require === 'function') {
-      return require('../data/waypoints/index.json');
+      try { return require('../data/waypoints/index.js'); } catch (e) { /* fallthrough */ }
+      try { return require('../data/waypoints/index.json'); } catch (e) { /* fallthrough */ }
     }
     return root && root.CloudSeaWaypointData ? root.CloudSeaWaypointData : [];
   }
