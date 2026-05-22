@@ -724,7 +724,8 @@
 
   // ===== Photography panel =====
   function onOpenPhoto() {
-    show('photo-overlay');
+    var overlay = $('photo-overlay');
+    if (overlay) overlay.classList.add('show');
     document.body.style.overflow = 'hidden';
 
     // Populate device selectors
@@ -737,7 +738,8 @@
   }
 
   function onClosePhoto() {
-    hide('photo-overlay');
+    var overlay = $('photo-overlay');
+    if (overlay) overlay.classList.remove('show');
     document.body.style.overflow = '';
   }
 
@@ -923,12 +925,48 @@
     if (!rec) { hide('camera-rec-section'); show('generic-camera-section'); return; }
     show('camera-rec-section');
     hide('generic-camera-section');
-    var html = '<div class="photo-device-title">📷 ' + esc(rec.label || rec.model || '相机推荐') + '</div>';
-    if (rec.params) html += '<div class="photo-grid">' + renderPhotoGrid(rec.params) + '</div>';
-    if (rec.lensAdvice) html += '<div class="photo-param-note" style="margin-top:4px;">' + esc(rec.lensAdvice) + '</div>';
+
+    var brandModel = [rec.brand, rec.model].filter(Boolean).join(' ') || rec.label || '相机推荐';
+    var html = '<div class="photo-device-title">📷 ' + esc(brandModel) + ' 推荐设置</div>';
+
+    if (rec.lens) {
+      html += '<div class="photo-param-note" style="margin-top:4px;">镜头：' + esc(rec.lens) + '</div>';
+      if (rec.lensNote) {
+        html += '<div class="photo-param-note" style="opacity:0.75;">' + esc(rec.lensNote) + '</div>';
+      }
+    }
+
+    var params = [];
+    if (rec.aperture) params.push({ label: '光圈', value: rec.aperture });
+    if (rec.shutter)  params.push({ label: '快门', value: rec.shutter });
+    if (rec.iso)      params.push({ label: 'ISO', value: rec.iso });
+    if (params.length) {
+      html += '<div class="photo-grid" style="margin-top:6px;">' + renderPhotoGrid(params) + '</div>';
+    }
+
+    if (rec.altLens && rec.altLens.name) {
+      html += '<div class="photo-param-note" style="margin-top:6px;">备用镜头：'
+        + esc(rec.altLens.name)
+        + (rec.altLens.note ? ' — ' + esc(rec.altLens.note) : '')
+        + '</div>';
+    }
+
+    if (rec.allLenses && rec.allLenses.length) {
+      html += '<div style="margin-top:6px;">';
+      rec.allLenses.forEach(function(l) {
+        html += '<div class="reason-item">' + esc(l.name)
+          + (l.bestAperture ? '（推荐 ' + esc(l.bestAperture) + '）' : '')
+          + (l.note ? ' — ' + esc(l.note) : '')
+          + '</div>';
+      });
+      html += '</div>';
+    }
+
     if (rec.tips && rec.tips.length) {
-      html += '<div class="forecast-reasons" style="margin-top:4px;">';
-      rec.tips.forEach(function(t) { html += '<div class="reason-item">' + esc(typeof t === 'string' ? t : t.text || '') + '</div>'; });
+      html += '<div class="forecast-reasons" style="margin-top:6px;">';
+      rec.tips.forEach(function(t) {
+        html += '<div class="reason-item">' + esc(typeof t === 'string' ? t : t.text || '') + '</div>';
+      });
       html += '</div>';
     }
     setHTML('camera-rec-section', html);
@@ -938,11 +976,58 @@
     if (!rec) { hide('phone-rec-section'); show('generic-phone-section'); return; }
     show('phone-rec-section');
     hide('generic-phone-section');
-    var html = '<div class="photo-device-title">📱 ' + esc(rec.label || rec.model || '手机推荐') + '</div>';
-    if (rec.params) html += '<div class="photo-grid">' + renderPhotoGrid(rec.params) + '</div>';
+
+    var brandModel = [rec.brand, rec.model].filter(Boolean).join(' ') || rec.label || '手机推荐';
+    var html = '<div class="photo-device-title">📱 ' + esc(brandModel) + ' 推荐设置</div>';
+
+    if (rec.mode) {
+      html += '<div class="photo-param-note" style="margin-top:4px;">拍摄模式：' + esc(rec.mode) + '</div>';
+      if (rec.modeNote) {
+        html += '<div class="photo-param-note" style="opacity:0.75;">' + esc(rec.modeNote) + '</div>';
+      }
+    }
+
+    if (rec.primaryLens) {
+      var lens = rec.primaryLens;
+      html += '<div class="photo-param-note" style="margin-top:4px;">主镜头：'
+        + esc((lens.focal ? lens.focal + 'mm ' : '') + (lens.name || ''))
+        + (lens.note ? ' — ' + esc(lens.note) : '')
+        + '</div>';
+    }
+
+    var pro = rec.proSettings || {};
+    var params = [];
+    if (pro.iso)     params.push({ label: '专业 ISO', value: pro.iso });
+    if (pro.shutter) params.push({ label: '快门', value: pro.shutter });
+    if (pro.wb)      params.push({ label: '白平衡', value: pro.wb });
+    if (params.length) {
+      html += '<div class="photo-grid" style="margin-top:6px;">' + renderPhotoGrid(params) + '</div>';
+    }
+
+    if (rec.altLens && (rec.altLens.name || rec.altLens.focal)) {
+      var alt = rec.altLens;
+      html += '<div class="photo-param-note" style="margin-top:6px;">备用镜头：'
+        + esc((alt.focal ? alt.focal + 'mm ' : '') + (alt.name || ''))
+        + (alt.note ? ' — ' + esc(alt.note) : '')
+        + '</div>';
+    }
+
+    if (rec.features && rec.features.length) {
+      html += '<div class="forecast-reasons" style="margin-top:6px;">';
+      rec.features.forEach(function(f) {
+        html += '<div class="reason-item">✨ ' + esc(typeof f === 'string' ? f : (f.text || '')) + '</div>';
+      });
+      html += '</div>';
+    }
+    if (rec.timelapse) {
+      html += '<div class="photo-param-note" style="margin-top:4px;">⏱ 延时摄影：' + esc(rec.timelapse) + '</div>';
+    }
+
     if (rec.tips && rec.tips.length) {
-      html += '<div class="forecast-reasons" style="margin-top:4px;">';
-      rec.tips.forEach(function(t) { html += '<div class="reason-item">' + esc(typeof t === 'string' ? t : t.text || '') + '</div>'; });
+      html += '<div class="forecast-reasons" style="margin-top:6px;">';
+      rec.tips.forEach(function(t) {
+        html += '<div class="reason-item">' + esc(typeof t === 'string' ? t : t.text || '') + '</div>';
+      });
       html += '</div>';
     }
     setHTML('phone-rec-section', html);
@@ -1077,16 +1162,68 @@
     var score = state.analysis?.score ?? 0;
     var title = state.locationName + ' 云海预测：' + score + ' 分';
     var text = title + '\n' + (state.analysis?.summary || '');
+    var fullText = text + '\n' + location.href;
 
-    if (navigator.share) {
-      navigator.share({ title: '云海观测决策台', text: text, url: location.href }).catch(function() {});
-    } else {
-      navigator.clipboard.writeText(text + '\n' + location.href).then(function() {
-        showToast('已复制分享内容到剪贴板');
-      }).catch(function() {
-        prompt('请手动复制分享内容：', text);
-      });
+    // 1) Web Share API (rarely available under file://)
+    if (typeof navigator.share === 'function') {
+      navigator.share({ title: '云海观测决策台', text: text, url: location.href })
+        .then(function() { /* ok */ })
+        .catch(function() { fallbackCopy(fullText); });
+      return;
     }
+    fallbackCopy(fullText);
+  }
+
+  function fallbackCopy(text) {
+    // 2) Modern Clipboard API (only works in secure context with permission)
+    var modern = (navigator.clipboard && typeof navigator.clipboard.writeText === 'function')
+      ? navigator.clipboard.writeText(text)
+      : Promise.reject();
+
+    modern.then(function() {
+      showToast('已复制分享内容到剪贴板');
+    }).catch(function() {
+      // 3) Legacy execCommand fallback — works under file:// in Android WebView
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.top = '-1000px';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        ta.setSelectionRange(0, text.length);
+        var ok = document.execCommand && document.execCommand('copy');
+        document.body.removeChild(ta);
+        if (ok) {
+          showToast('已复制分享内容到剪贴板');
+        } else {
+          showShareDialog(text);
+        }
+      } catch (e) {
+        showShareDialog(text);
+      }
+    });
+  }
+
+  // Last-resort visible share dialog (since prompt() is disabled in RN WebView)
+  function showShareDialog(text) {
+    var existing = document.getElementById('share-fallback-overlay');
+    if (existing) existing.parentNode.removeChild(existing);
+    var ov = document.createElement('div');
+    ov.id = 'share-fallback-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:999;display:flex;align-items:center;justify-content:center;padding:20px;';
+    ov.innerHTML = '<div style="background:#0d1526;border-radius:12px;padding:16px;max-width:90%;color:#e0e6f0;font-size:14px;">' +
+      '<div style="font-weight:600;margin-bottom:8px;">长按下方文字复制分享：</div>' +
+      '<textarea readonly style="width:100%;min-height:120px;background:#1a2540;color:#e0e6f0;border:1px solid #2a3858;border-radius:6px;padding:8px;font-size:13px;">' +
+      text.replace(/</g, '&lt;') + '</textarea>' +
+      '<div style="text-align:right;margin-top:10px;"><button id="share-fallback-close" style="background:#3aa4ff;color:#fff;border:none;border-radius:6px;padding:6px 18px;font-size:14px;">关闭</button></div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    document.getElementById('share-fallback-close').addEventListener('click', function() {
+      ov.parentNode.removeChild(ov);
+    });
   }
 
   // ===== Feedback =====
@@ -1105,7 +1242,8 @@
   }
 
   function onOpenFeedback() {
-    show('feedback-overlay');
+    var overlay = $('feedback-overlay');
+    if (overlay) overlay.classList.add('show');
     document.body.style.overflow = 'hidden';
 
     var records = feedbackMod.getFeedbackRecords();
@@ -1160,7 +1298,8 @@
   }
 
   function onCloseFeedback() {
-    hide('feedback-overlay');
+    var overlay = $('feedback-overlay');
+    if (overlay) overlay.classList.remove('show');
     document.body.style.overflow = '';
   }
 
