@@ -80,3 +80,8 @@ web/dist/
 
 # Playwright MCP runtime cache
 .playwright-mcp/
+
+# Release artifacts (large binaries; attach to GitHub Release instead)
+*.apk
+build-apk.log
+

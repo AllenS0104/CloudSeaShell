@@ -1,88 +1,590 @@
-<!DOCTYPE html>
-<html lang="zh">
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <title>Cloud Sea Forecast Lab | 云海观测决策台</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="面向摄影、徒步与山地观测的专业云海观测决策工具，提供天气研判、观测建议、地图辅助与分享简报。">
-  <meta name="theme-color" content="#0095ff">
-  <link rel="manifest" href="./manifest.json">
-  <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./styles/main.css">
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0b2f5b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="description" content="面向摄影、徒步与山地观测的专业天气分析工具">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <title>云海观测决策台</title>
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/components.css">
 </head>
 <body>
-  <div id="app-container">
-    <header class="card app-header">
-      <div class="header-eyebrow">Cloud Sea Forecast Lab</div>
-      <h1>云海观测决策台</h1>
-      <p class="header-subtitle">面向摄影、徒步与山地观测的专业天气研判工具</p>
-      <div class="header-toolbar">
-        <div id="controls-section">
-          <input type="text" id="address" placeholder="输入地点（默认：北京）" autocomplete="off">
-          <button id="search-btn" type="button">确认</button>
-          <button id="locate-btn" type="button">📍 当前位置</button>
-          <select id="daySelector" aria-label="选择日期"></select>
-        </div>
+
+<div class="page-container" id="page-main">
+
+  <!-- ========== Header ========== -->
+  <div class="cs-card header">
+    <div class="header-eyebrow">CLOUD SEA FORECAST LAB</div>
+    <div class="header-title">云海观测决策台</div>
+    <div class="header-subtitle">面向摄影、徒步与山地观测的专业天气研判工具</div>
+    <div class="controls">
+      <input class="search-input" id="search-input" placeholder="输入地点（默认：北京）" autocomplete="off">
+      <button class="btn-primary" id="btn-search" aria-label="搜索地点">确认</button>
+      <button class="btn-locate" id="btn-locate" aria-label="获取当前位置">📍 当前位置</button>
+    </div>
+    <div class="day-selector">
+      <select id="day-selector" aria-label="选择日期">
+        <option value="0">选择日期</option>
+      </select>
+    </div>
+
+    <!-- Search History -->
+    <div class="search-history hidden" id="search-history-section">
+      <div class="search-history-header">
+        <span class="search-history-label">最近搜索</span>
       </div>
-    </header>
+      <div class="search-history-tags" id="search-history-tags"></div>
+    </div>
 
-    <div id="status-banner" class="card status-banner is-hidden" role="status" aria-live="polite"></div>
-
-    <main id="main-content">
-      <section id="left-panel" class="card panel">
-        <div class="panel-head">
-          <div>
-            <div class="panel-eyebrow">Observation Dashboard</div>
-            <h2 class="panel-title">观测条件总览</h2>
-          </div>
-        </div>
-        <div id="map" aria-label="天气地图"></div>
-        <section id="weather-dashboard" aria-live="polite"></section>
-      </section>
-
-      <section id="right-panel" class="card panel">
-        <div class="panel-head">
-          <div>
-            <div class="panel-eyebrow">Hourly Timeline</div>
-            <h2 class="panel-title">逐小时预报</h2>
-          </div>
-        </div>
-        <section id="hourly-section">
-          <div class="hourly-header">
-            <div>时间</div>
-            <div class="stat-header"><span>🌡️</span><span>温度</span></div>
-            <div class="stat-header"><span>🌫️</span><span>云底高度</span></div>
-            <div class="stat-header"><span>💦</span><span>降水概率</span></div>
-          </div>
-          <div id="hourly-forecast-list"></div>
-        </section>
-        <button id="sos-button" type="button">🆘 SOS 紧急求救</button>
-      </section>
-    </main>
-  </div>
-
-  <div id="sos-modal" class="modal-overlay" aria-hidden="true">
-    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="sos-title">
-      <h2 id="sos-title">紧急求救</h2>
-      <p id="sos-instruction">点击下方按钮，准备生成包含您当前位置的求救信息。</p>
-      <div id="sos-info-container" class="is-hidden">
-        <pre id="sos-info"></pre>
-        <div id="sos-actions"></div>
+    <!-- Favorite Locations -->
+    <div class="search-history hidden" id="fav-section" style="margin-top:0;">
+      <div class="search-history-header">
+        <span class="search-history-label">⭐ 收藏地点</span>
       </div>
-      <button id="prepare-sos-btn" class="modal-button" type="button">准备求救信号</button>
-      <button id="close-sos-btn" class="modal-button" type="button">关闭</button>
+      <div class="search-history-tags" id="fav-tags"></div>
     </div>
   </div>
 
-  <noscript>
-    <div class="noscript-message">此页面需要启用 JavaScript 才能显示地图、天气与 SOS 功能。</div>
-  </noscript>
+  <!-- ========== Status Banner ========== -->
+  <div class="status-banner hidden" id="status-banner"></div>
 
-  <script type="module" src="./scripts/app.js"></script>
+  <!-- ========== Hero Decision Card ========== -->
+  <div class="hero-card hidden" id="hero-card">
+    <span class="hero-emoji" id="hero-emoji"></span>
+    <span class="hero-text" id="hero-text"></span>
+  </div>
+
+  <!-- ========== Loading Skeleton ========== -->
+  <div class="skeleton-container hidden" id="loading-skeleton">
+    <div class="skeleton-header">
+      <div class="skeleton-block skeleton-pulse" style="width:40%;height:20px;margin:0 auto 8px;"></div>
+      <div class="skeleton-block skeleton-pulse" style="width:60%;height:30px;margin:0 auto 8px;"></div>
+      <div class="skeleton-block skeleton-pulse" style="width:80%;height:15px;margin:0 auto;"></div>
+    </div>
+    <div class="skeleton-block skeleton-pulse skeleton-map"></div>
+    <div class="skeleton-stats-row">
+      <div class="skeleton-block skeleton-pulse skeleton-stat"></div>
+      <div class="skeleton-block skeleton-pulse skeleton-stat"></div>
+      <div class="skeleton-block skeleton-pulse skeleton-stat"></div>
+    </div>
+    <div class="skeleton-stats-row">
+      <div class="skeleton-block skeleton-pulse skeleton-stat"></div>
+      <div class="skeleton-block skeleton-pulse skeleton-stat"></div>
+      <div class="skeleton-block skeleton-pulse skeleton-stat"></div>
+    </div>
+    <div class="skeleton-forecast">
+      <div class="skeleton-block skeleton-pulse" style="width:50%;height:18px;margin:0 auto 10px;"></div>
+      <div class="skeleton-block skeleton-pulse" style="width:90%;height:40px;margin:0 auto 8px;border-radius:6px;"></div>
+      <div class="skeleton-block skeleton-pulse" style="width:100%;height:14px;margin-bottom:5px;"></div>
+      <div class="skeleton-block skeleton-pulse" style="width:85%;height:14px;"></div>
+    </div>
+  </div>
+
+  <!-- ========== Error State ========== -->
+  <div class="card error-state hidden" id="error-state">
+    <span class="error-icon">⚠️</span>
+    <span class="error-text">数据加载失败</span>
+    <span class="error-hint" id="error-hint"></span>
+    <button class="error-retry-btn" id="btn-retry" aria-label="重新加载">🔄 重新加载</button>
+  </div>
+
+  <!-- ========== Main Content (hidden until data loaded) ========== -->
+  <div id="main-content" class="hidden">
+
+    <!-- Observation Dashboard -->
+    <div class="card">
+      <div class="section-heading">
+        <div class="section-eyebrow">OBSERVATION DASHBOARD</div>
+        <div class="section-title">观测条件总览</div>
+      </div>
+
+      <!-- Map -->
+      <div class="map-container" id="map-container">
+        <iframe id="map-frame" title="地图" loading="lazy"></iframe>
+      </div>
+
+      <div class="cs-card cs-card--compact hidden" id="nearby-waypoints-card">
+        <div class="cs-section-header">
+          <div class="cs-section-header__eyebrow">PHOTO WAYPOINTS</div>
+          <div class="cs-section-header__title">附近机位</div>
+        </div>
+        <div class="waypoint-direction hidden" id="selected-direction"></div>
+        <div class="waypoint-list" id="nearby-waypoints-list"></div>
+        <div class="disclaimer">📍 机位为示例数据，欢迎社区补充；出行前请核对路况、管制与安全风险。</div>
+      </div>
+
+      <!-- Weather Main -->
+      <div class="weather-main">
+        <div class="temp"><span id="current-temp">--</span>°<span class="temp-sub">/<span id="current-feels-like">--</span>°</span></div>
+        <div class="location-text" id="location-name">--</div>
+        <button class="fav-btn" id="btn-toggle-fav" aria-label="收藏此地点">
+          <span id="fav-icon">☆</span> <span id="fav-label">收藏</span>
+        </button>
+      </div>
+
+      <!-- Stats Grid -->
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat-card">
+          <span class="stat-icon">💧</span>
+          <div><div class="stat-label">湿度</div><div class="stat-value" id="stat-humidity">--%</div></div>
+        </div>
+        <div class="stat-card">
+          <span class="stat-icon">🌬️</span>
+          <div><div class="stat-label">风速</div><div class="stat-value" id="stat-wind">-- m/s</div></div>
+        </div>
+        <div class="stat-card">
+          <span class="stat-icon">☁️</span>
+          <div><div class="stat-label">云量</div><div class="stat-value" id="stat-cloud">--%</div></div>
+        </div>
+        <div class="stat-card">
+          <span class="stat-icon">⛰️</span>
+          <div><div class="stat-label">海拔</div><div class="stat-value" id="stat-elevation">-- m</div></div>
+        </div>
+        <div class="stat-card">
+          <span class="stat-icon">🌫️</span>
+          <div><div class="stat-label">云底高度</div><div class="stat-value" id="stat-cloud-base">-- m</div></div>
+        </div>
+        <div class="stat-card">
+          <span class="stat-icon">💧</span>
+          <div><div class="stat-label">露点差</div><div class="stat-value" id="stat-dew-gap">--°C</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== Cloud Sea Forecast ========== -->
+    <div class="card">
+      <div class="section-heading">
+        <div class="section-eyebrow">FORECAST ASSESSMENT</div>
+        <div class="section-title">云海判断</div>
+      </div>
+      <div class="forecast-card">
+        <div class="forecast-title" id="forecast-day-label">今日云海预测</div>
+        <div class="forecast-result" id="forecast-result">--</div>
+      </div>
+      <div class="forecast-summary" id="forecast-summary"></div>
+      <div style="text-align:center;margin:12px 0 4px;">
+        <button class="cs-pill-button cs-pill-button--ghost" id="btn-share-poster" aria-label="生成可分享长图海报">🖼️ 生成海报</button>
+      </div>
+      <div class="forecast-reasons" id="forecast-reasons"></div>
+      <div class="disclaimer">⚠️ 预测仅供参考，基于数值天气模式估算，实际云海受微地形、局地气流等因素影响，请结合现场条件判断。</div>
+    </div>
+
+    <!-- ========== Sunset Glow Prediction ========== -->
+    <div class="card hidden" id="glow-section">
+      <div class="section-heading">
+        <div class="section-eyebrow">SUNSET GLOW FORECAST</div>
+        <div class="section-title">🌅 晚霞 / 火烧云预测</div>
+      </div>
+      <div class="forecast-card">
+        <div class="forecast-result" id="glow-result">--</div>
+      </div>
+      <div class="stats-grid" id="glow-stats" style="margin-top:8px;"></div>
+      <div class="forecast-summary" id="glow-summary"></div>
+      <div class="forecast-reasons" id="glow-reasons"></div>
+      <div class="disclaimer">🌅 晚霞预测基于中高层云量、低云遮挡、湿度和能见度综合评估。最佳观赏窗口为日落前 30 分钟至日落后 15 分钟。</div>
+    </div>
+
+    <!-- ========== Stargazing / Milky Way ========== -->
+    <div class="card hidden" id="star-section">
+      <div class="section-heading">
+        <div class="section-eyebrow">STARGAZING FORECAST</div>
+        <div class="section-title">🌌 银河 / 星空预测</div>
+      </div>
+      <div class="forecast-card">
+        <div class="forecast-result" id="star-result">--</div>
+      </div>
+      <div class="stats-grid" id="star-stats" style="margin-top:8px;"></div>
+      <div class="forecast-reasons" id="star-reasons"></div>
+
+      <!-- Astrophotography params -->
+      <div style="margin-top:8px;">
+        <div class="photo-device-title" style="color:#b388ff;">📷 星空摄影参数</div>
+        <div class="photo-grid" id="star-astro-params"></div>
+        <div class="photo-grid" id="star-astro-params2" style="margin-top:4px;"></div>
+      </div>
+      <div class="disclaimer">🌌 银河核心（人马座方向）在北半球 4-10 月可见。新月前后 ±5 天是最佳观测窗口。高海拔、远离城市光污染的地点效果最佳。</div>
+    </div>
+
+    <!-- ========== Safety Alerts ========== -->
+    <div id="safety-alerts" style="margin-bottom:10px;"></div>
+
+    <!-- ========== Guidance ========== -->
+    <div class="card hidden" id="guidance-section">
+      <div class="section-heading">
+        <div class="section-eyebrow">ACTION GUIDANCE</div>
+        <div class="section-title">观测行动建议</div>
+      </div>
+      <div class="guidance-card">
+        <div class="guidance-level" id="guidance-level"></div>
+        <div class="guidance-grid" id="guidance-grid"></div>
+        <div class="forecast-reasons" id="guidance-actions" style="margin-top:8px;"></div>
+      </div>
+    </div>
+
+    <!-- ========== Hourly Timeline ========== -->
+    <div class="card">
+      <div class="section-heading collapsible-header" id="hourly-toggle" aria-role="button" aria-label="展开或收起逐小时预报">
+        <div class="section-eyebrow">HOURLY TIMELINE</div>
+        <div class="section-title">逐小时预报 <span class="collapse-arrow" id="hourly-arrow">▶</span></div>
+      </div>
+      <div class="hourly-section hidden" id="hourly-section">
+        <div class="hourly-header">
+          <div class="hourly-col-time">时间</div>
+          <div class="hourly-col-temp">🌡️温度</div>
+          <div class="hourly-col-cloud">🌫️云底</div>
+          <div class="hourly-col-precip">💦降水</div>
+        </div>
+        <div class="hourly-scroll" id="hourly-list"></div>
+      </div>
+    </div>
+
+    <!-- ========== Multi-Model Fusion ========== -->
+    <div class="card hidden" id="fusion-section">
+      <div class="section-heading collapsible-header" id="fusion-toggle" aria-role="button" aria-label="展开或收起多模式融合">
+        <div class="section-eyebrow">MULTI-MODEL FUSION</div>
+        <div class="section-title">多模式融合预测 <span class="collapse-arrow" id="fusion-arrow">▶</span></div>
+      </div>
+      <div class="collapsed-summary hidden" id="fusion-collapsed"></div>
+      <div class="loading-text hidden" id="fusion-loading">正在获取多模式数据...</div>
+      <div class="hidden" id="fusion-detail">
+        <div class="forecast-card">
+          <div class="forecast-result" id="fusion-result">--</div>
+        </div>
+        <div class="stats-grid" id="fusion-stats" style="margin-top:8px;"></div>
+        <div class="forecast-summary" id="fusion-summary" style="margin-top:6px;"></div>
+        <div style="margin-top:8px;">
+          <div class="section-eyebrow" style="margin-bottom:4px;">各模式得分</div>
+          <div id="fusion-models"></div>
+        </div>
+        <div class="disclaimer" id="fusion-disclaimer"></div>
+      </div>
+    </div>
+
+    <!-- SOS -->
+    <button class="sos-button" id="btn-sos" aria-label="紧急求救">🆘 SOS 紧急求救</button>
+  </div>
+</div>
+
+<!-- ========== Bottom Fixed Bar ========== -->
+<nav class="bottom-bar">
+  <button class="bottom-btn" id="btn-open-photo" aria-label="打开摄影参数">
+    <span class="bottom-btn-icon">📸</span>
+    <span class="bottom-btn-label">摄影参数</span>
+  </button>
+  <button class="bottom-btn" id="btn-open-feedback" aria-label="打开反馈面板">
+    <span class="bottom-btn-icon">📝</span>
+    <span class="bottom-btn-label">反馈</span>
+  </button>
+  <button class="bottom-btn" id="btn-go-history" aria-label="查看观测历史">
+    <span class="bottom-btn-icon">📊</span>
+    <span class="bottom-btn-label">历史</span>
+  </button>
+  <button class="bottom-btn" id="btn-sos-bar" aria-label="紧急求救">
+    <span class="bottom-btn-icon">🆘</span>
+    <span class="bottom-btn-label">紧急求救</span>
+  </button>
+  <button class="bottom-btn" id="btn-share" aria-label="分享给朋友">
+    <span class="bottom-btn-icon">📤</span>
+    <span class="bottom-btn-label">分享</span>
+  </button>
+</nav>
+
+<!-- ========== Photography Popup Panel ========== -->
+<div class="photo-overlay" id="photo-overlay">
+  <div class="photo-overlay-mask" id="photo-overlay-mask"></div>
+  <div class="photo-panel">
+    <div class="photo-panel-header">
+      <div class="photo-panel-title">📸 摄影参数推荐</div>
+      <button class="photo-panel-close" id="btn-close-photo" aria-label="关闭摄影面板">✕</button>
+    </div>
+    <div class="photo-panel-body" id="photo-panel-body">
+      <!-- Lighting & EV -->
+      <div class="photo-hero">
+        <div class="photo-hero-icon" id="photo-light-icon"></div>
+        <div class="photo-hero-phase" id="photo-light-label"></div>
+        <div class="photo-hero-ev" id="photo-ev"></div>
+      </div>
+      <div class="photo-summary" id="photo-summary"></div>
+
+      <!-- Exposure Calculator -->
+      <div class="photo-section">
+        <div class="photo-device-title">📐 曝光参数计算</div>
+        <div class="exposure-table" id="exposure-table">
+          <div class="exposure-row exposure-header">
+            <div class="exposure-cell">光圈</div>
+            <div class="exposure-cell">快门</div>
+            <div class="exposure-cell">ISO</div>
+            <div class="exposure-cell">场景</div>
+          </div>
+          <!-- rows injected by JS -->
+        </div>
+      </div>
+
+      <!-- Device Selector -->
+      <div class="photo-section">
+        <div class="photo-device-title">📷 选择你的设备</div>
+        <div class="device-selectors">
+          <div class="device-select-row">
+            <span class="device-select-label">相机</span>
+            <select class="device-select-btn" id="camera-selector" aria-label="选择相机型号">
+              <option value="">选择相机型号 ▾</option>
+            </select>
+            <button class="device-clear-btn hidden" id="btn-clear-camera" aria-label="清除相机选择">✕</button>
+          </div>
+          <div class="device-select-row">
+            <span class="device-select-label">手机</span>
+            <select class="device-select-btn" id="phone-selector" aria-label="选择手机型号">
+              <option value="">选择手机型号 ▾</option>
+            </select>
+            <button class="device-clear-btn hidden" id="btn-clear-phone" aria-label="清除手机选择">✕</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Device-specific Camera Rec (injected by JS) -->
+      <div class="photo-section hidden" id="camera-rec-section"></div>
+
+      <!-- Device-specific Phone Rec (injected by JS) -->
+      <div class="photo-section hidden" id="phone-rec-section"></div>
+
+      <!-- Generic Camera (when no device selected) -->
+      <div class="photo-section" id="generic-camera-section">
+        <div class="photo-device-title">🎞️ 单反 / 微单推荐</div>
+        <div class="photo-grid" id="generic-camera-params"></div>
+        <div class="photo-grid" id="generic-camera-focal" style="margin-top:6px;"></div>
+        <div class="photo-grid hidden" id="generic-dof-section" style="margin-top:6px;"></div>
+      </div>
+
+      <!-- Filters -->
+      <div class="photo-section hidden" id="filter-section">
+        <div class="photo-device-title">🔘 滤镜建议</div>
+        <div id="filter-list"></div>
+      </div>
+
+      <!-- Sun/Moon -->
+      <div class="photo-section hidden" id="celestial-section">
+        <div class="photo-device-title">🌅 日月方位</div>
+        <div class="photo-grid" id="celestial-grid"></div>
+      </div>
+
+      <!-- Phone (generic, when no device selected) -->
+      <div class="photo-section" id="generic-phone-section">
+        <div class="photo-device-title">📱 手机拍摄</div>
+        <div class="photo-grid" id="generic-phone-params"></div>
+        <div class="forecast-reasons" id="generic-phone-tips" style="margin-top:4px;"></div>
+      </div>
+
+      <!-- Composition -->
+      <div class="photo-section hidden" id="composition-section">
+        <div class="photo-device-title">🎨 构图建议</div>
+        <div class="forecast-reasons" id="composition-list"></div>
+      </div>
+
+      <!-- Shooting Timeline -->
+      <div class="photo-section hidden" id="timeline-section">
+        <div class="photo-device-title">⏱️ 拍摄时间轴</div>
+        <div class="timeline-bar" id="timeline-bar"></div>
+        <div class="timeline-list" id="timeline-list"></div>
+      </div>
+
+      <!-- ND Calculator -->
+      <div class="photo-section hidden" id="nd-section">
+        <div class="photo-device-title">🔢 ND 减光计算</div>
+        <div class="photo-grid" id="nd-grid"></div>
+      </div>
+
+      <!-- Timelapse -->
+      <div class="photo-section hidden" id="timelapse-section">
+        <div class="photo-device-title">🎥 延时摄影建议</div>
+        <div class="photo-grid" id="timelapse-grid"></div>
+        <div class="photo-param-note" id="timelapse-note" style="margin-top:4px;"></div>
+        <div class="forecast-reasons" id="timelapse-tips" style="margin-top:4px;"></div>
+      </div>
+
+      <div class="disclaimer" style="margin-bottom:20px;">参考自巧摄(Planit)曝光计算思路，参数基于当前天气条件自动推算，实际拍摄请根据现场光线微调。</div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== Feedback Popup Panel ========== -->
+<div class="photo-overlay" id="feedback-overlay">
+  <div class="photo-overlay-mask" id="feedback-overlay-mask"></div>
+  <div class="photo-panel">
+    <div class="photo-panel-header">
+      <div class="photo-panel-title">📝 预测反馈</div>
+      <button class="photo-panel-close" id="btn-close-feedback" aria-label="关闭反馈面板">✕</button>
+    </div>
+    <div class="photo-panel-body" id="feedback-panel-body">
+      <div id="feedback-content">
+        <!-- Today's prediction snapshot -->
+        <div class="fb-section">
+          <div class="fb-section-title">📊 今日预测快照</div>
+          <div class="fb-pred-row" id="fb-pred-row">
+            <div class="fb-pred-item">
+              <span class="fb-pred-icon">☁️</span>
+              <span class="fb-pred-label">云海</span>
+              <span class="fb-pred-score" id="fb-cloud-score">-- 分</span>
+            </div>
+            <div class="fb-pred-item">
+              <span class="fb-pred-icon">🌅</span>
+              <span class="fb-pred-label">晚霞</span>
+              <span class="fb-pred-score" id="fb-glow-score">-- 分</span>
+            </div>
+            <div class="fb-pred-item">
+              <span class="fb-pred-icon">🌌</span>
+              <span class="fb-pred-label">银河</span>
+              <span class="fb-pred-score" id="fb-star-score">-- 分</span>
+            </div>
+          </div>
+          <div class="fb-date-info" id="fb-date-info"></div>
+        </div>
+
+        <!-- Actual toggles -->
+        <div class="fb-section">
+          <div class="fb-section-title">✅ 实际是否出现</div>
+          <div class="fb-toggle-row">
+            <div class="fb-toggle-item" id="fb-toggle-cloud">
+              <span class="fb-toggle-icon">☁️</span>
+              <span class="fb-toggle-label">云海</span>
+              <div class="fb-toggle-btn fb-toggle-null" id="fb-cloud-btn">未填</div>
+            </div>
+            <div class="fb-toggle-item" id="fb-toggle-glow">
+              <span class="fb-toggle-icon">🌅</span>
+              <span class="fb-toggle-label">晚霞</span>
+              <div class="fb-toggle-btn fb-toggle-null" id="fb-glow-btn">未填</div>
+            </div>
+            <div class="fb-toggle-item" id="fb-toggle-stars">
+              <span class="fb-toggle-icon">🌌</span>
+              <span class="fb-toggle-label">银河</span>
+              <div class="fb-toggle-btn fb-toggle-null" id="fb-star-btn">未填</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Rating -->
+        <div class="fb-section">
+          <div class="fb-section-title">⭐ 整体评分</div>
+          <div class="fb-rating-row" id="fb-rating-row">
+            <span class="fb-star" data-rating="1">★</span>
+            <span class="fb-star" data-rating="2">★</span>
+            <span class="fb-star" data-rating="3">★</span>
+            <span class="fb-star" data-rating="4">★</span>
+            <span class="fb-star" data-rating="5">★</span>
+          </div>
+        </div>
+
+        <!-- Note -->
+        <div class="fb-section">
+          <div class="fb-section-title">💬 备注（可选）</div>
+          <textarea class="fb-note-input" id="fb-note" placeholder="记录现场情况、拍摄心得..." maxlength="200"></textarea>
+        </div>
+
+        <!-- Submit -->
+        <button class="fb-submit-btn" id="btn-submit-feedback">提交反馈</button>
+      </div>
+
+      <div class="fb-empty-hint hidden" id="fb-empty-hint">暂无预测记录，请先查看天气预报</div>
+
+      <!-- Stats & Export -->
+      <div class="fb-section fb-stats-section hidden" id="fb-stats-section">
+        <div class="fb-stats-row" id="fb-stats-row">
+          <div class="fb-stats-item">
+            <span class="fb-stats-num" id="fb-stats-total">0</span>
+            <span class="fb-stats-label">总记录</span>
+          </div>
+          <div class="fb-stats-item">
+            <span class="fb-stats-num" id="fb-stats-filled">0</span>
+            <span class="fb-stats-label">已反馈</span>
+          </div>
+          <div class="fb-stats-item">
+            <span class="fb-stats-num" id="fb-stats-accuracy">--</span>
+            <span class="fb-stats-label">准确率</span>
+          </div>
+        </div>
+        <button class="fb-export-btn" id="btn-export-feedback">📋 导出 CSV 到剪贴板</button>
+      </div>
+
+      <div style="height:30px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== History Page (toggled via JS) ========== -->
+<div class="page-container hidden" id="page-history">
+  <div class="history-header">
+    <div class="history-header-left">
+      <span class="history-title">📊 观测历史</span>
+      <span class="history-subtitle">预测记录与准确性趋势</span>
+    </div>
+    <button class="export-btn" id="btn-export-csv" aria-label="导出CSV数据">
+      <span class="export-icon">📋</span>
+      <span class="export-label">导出</span>
+    </button>
+  </div>
+
+  <!-- Stats Cards -->
+  <div class="card stats-overview hidden" id="history-stats">
+    <div class="stats-grid-4" id="history-stats-grid"></div>
+  </div>
+
+  <!-- Empty State -->
+  <div class="cs-card cs-empty-state hidden" id="history-empty">
+    <span class="cs-empty-state__icon">🔭</span>
+    <span class="cs-empty-state__title">暂无观测记录</span>
+    <span class="cs-empty-state__hint">去首页查看预测吧</span>
+    <button class="cs-pill-button" id="btn-go-home" aria-label="返回首页">返回首页</button>
+  </div>
+
+  <!-- Records List -->
+  <div class="records-list" id="history-records"></div>
+
+  <!-- Back button at bottom -->
+  <div style="text-align:center;margin-top:16px;">
+    <button class="btn-primary" id="btn-back-home">← 返回首页</button>
+  </div>
+</div>
+
+<!-- ========== Scripts ========== -->
+<!-- Algorithm bundle (CommonJS → browser bridge) -->
+<script src="js/bundle.js"></script>
+
+<!-- Web-adapted modules -->
+<script src="js/storage.js"></script>
+<script src="js/services-core.js"></script>
+<script src="js/favorites-core.js"></script>
+<script src="js/search-history-core.js"></script>
+<script src="js/feedback-core.js"></script>
+<script src="js/waypoints.js"></script>
+<script src="js/adapters/web-http.js"></script>
+<script src="js/adapters/web-storage.js"></script>
+<script src="js/adapters/web-ui.js"></script>
+<script src="js/services.js"></script>
+<script src="js/fusion.js"></script>
+<script src="js/feedback.js"></script>
+<script src="js/search-history.js"></script>
+<script src="js/favorites.js"></script>
+<script src="js/poster-renderer.js"></script>
+
+<!-- App controller (last) -->
+<script src="js/app.js"></script>
+
+<!-- Service Worker registration -->
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then(reg => console.log('SW registered:', reg.scope))
+      .catch(err => console.warn('SW registration failed:', err));
+  });
+}
+</script>
+
 </body>
 </html>

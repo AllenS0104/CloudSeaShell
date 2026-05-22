@@ -8,47 +8,11 @@
 // We test the module by importing its source directly.
 // The embedded web app uses ES modules, so we configure Jest to handle them.
 
-const fs = require('fs');
 const path = require('path');
 
-// Load the calculations module source and evaluate it in a controlled scope.
-const calcPath = path.join(
-  __dirname,
-  '..',
-  'android',
-  'app',
-  'src',
-  'main',
-  'assets',
-  'weather-cloud-forecast-app',
-  'scripts',
-  'calculations.js',
-);
-const calcSource = fs.readFileSync(calcPath, 'utf-8');
-
-// Strip ES module syntax for evaluation in CommonJS
-const cjsSource = calcSource
-  .replace(/^export\s+/gm, '')
-  .replace(/^import\s+.*$/gm, '');
-
-// Evaluate in a function scope and capture exports
-const moduleExports = {};
-const wrappedSource = `
-  ${cjsSource}
-  return {
-    cloudBaseFromHumidity,
-    cloudBaseFromDewPoint,
-    scoreInversion,
-    scoreToConfidence,
-    dewPointSpread,
-    analyzeCloudSeaSample,
-    windDirection,
-    formatDistanceKm,
-    formatCoords,
-  };
-`;
-const moduleFactory = new Function(wrappedSource);
-const calc = moduleFactory();
+// Source of truth: shared/core/calculations.js (CommonJS).
+// The Android assets and web bundle are synced from this file via `npm run sync:shared`.
+const calc = require(path.join('..', 'shared', 'core', 'calculations.js'));
 
 // ─── Cloud Base ─────────────────────────────────────────────
 

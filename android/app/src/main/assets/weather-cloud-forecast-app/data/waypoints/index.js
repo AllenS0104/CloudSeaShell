@@ -1,0 +1,287 @@
+// 由 shared/core 同步；请勿直接编辑。运行 npm run sync:shared 更新。
+module.exports = [
+  {
+    "id": "niubei-shan",
+    "name": "牛背山",
+    "lat": 29.8039,
+    "lng": 102.4449,
+    "elevation": 3666,
+    "bestFor": [
+      "cloudsea",
+      "stargazing",
+      "sunrise"
+    ],
+    "bestSeasons": [
+      "秋",
+      "冬",
+      "春"
+    ],
+    "suggestedDirection": 45,
+    "notes": "示例机位：云海、贡嘎雪山方向与日出构图常见。",
+    "bortleClass": 3
+  },
+  {
+    "id": "wugong-shan",
+    "name": "武功山金顶",
+    "lat": 27.4715,
+    "lng": 114.1757,
+    "elevation": 1918,
+    "bestFor": [
+      "cloudsea",
+      "stargazing",
+      "sunrise"
+    ],
+    "bestSeasons": [
+      "春",
+      "秋",
+      "冬"
+    ],
+    "suggestedDirection": 90,
+    "notes": "示例机位：高山草甸与云海层次，注意大风低温。",
+    "bortleClass": 4
+  },
+  {
+    "id": "huashan-east-peak",
+    "name": "华山东峰",
+    "lat": 34.487,
+    "lng": 110.0913,
+    "elevation": 2096,
+    "bestFor": [
+      "sunrise",
+      "cloudsea"
+    ],
+    "bestSeasons": [
+      "春",
+      "秋",
+      "冬"
+    ],
+    "suggestedDirection": 80,
+    "notes": "示例机位：东峰日出与山脊云雾，夜间登山需评估安全。",
+    "bortleClass": 5
+  },
+  {
+    "id": "huangshan-shixin",
+    "name": "黄山始信峰",
+    "lat": 30.1496,
+    "lng": 118.1689,
+    "elevation": 1683,
+    "bestFor": [
+      "cloudsea",
+      "sunset"
+    ],
+    "bestSeasons": [
+      "冬",
+      "春"
+    ],
+    "suggestedDirection": 135,
+    "notes": "示例机位：松石前景与云海，雨雪后转晴更常见。",
+    "bortleClass": 5
+  },
+  {
+    "id": "emei-golden-summit",
+    "name": "峨眉山金顶",
+    "lat": 29.5256,
+    "lng": 103.3369,
+    "elevation": 3079,
+    "bestFor": [
+      "cloudsea",
+      "sunrise",
+      "stargazing"
+    ],
+    "bestSeasons": [
+      "秋",
+      "冬",
+      "春"
+    ],
+    "suggestedDirection": 90,
+    "notes": "示例机位：云海佛光与日出，冬季防滑保暖。",
+    "bortleClass": 4
+  },
+  {
+    "id": "siguniang-maobiliang",
+    "name": "四姑娘山猫鼻梁",
+    "lat": 31.0175,
+    "lng": 102.868,
+    "elevation": 3500,
+    "bestFor": [
+      "sunset",
+      "stargazing"
+    ],
+    "bestSeasons": [
+      "秋",
+      "冬"
+    ],
+    "suggestedDirection": 270,
+    "notes": "示例机位：幺妹峰日照金山与银河前景。",
+    "bortleClass": 3
+  },
+  {
+    "id": "yading-luorong",
+    "name": "稻城亚丁洛绒牛场",
+    "lat": 28.3728,
+    "lng": 100.3098,
+    "elevation": 4180,
+    "bestFor": [
+      "sunset",
+      "stargazing"
+    ],
+    "bestSeasons": [
+      "秋"
+    ],
+    "suggestedDirection": 220,
+    "notes": "示例机位：雪山、草甸与暗夜环境，注意高反。",
+    "bortleClass": 2
+  },
+  {
+    "id": "meili-feilai",
+    "name": "梅里雪山飞来寺",
+    "lat": 28.4426,
+    "lng": 98.8679,
+    "elevation": 3400,
+    "bestFor": [
+      "sunrise",
+      "stargazing",
+      "cloudsea"
+    ],
+    "bestSeasons": [
+      "冬",
+      "春"
+    ],
+    "suggestedDirection": 270,
+    "notes": "示例机位：卡瓦格博日照金山，冬春晴窗更稳。",
+    "bortleClass": 3
+  },
+  {
+    "id": "laojun-shan",
+    "name": "老君山金顶",
+    "lat": 33.7692,
+    "lng": 111.6408,
+    "elevation": 2217,
+    "bestFor": [
+      "cloudsea",
+      "sunset",
+      "sunrise"
+    ],
+    "bestSeasons": [
+      "冬",
+      "春",
+      "秋"
+    ],
+    "suggestedDirection": 250,
+    "notes": "示例机位：金顶建筑群与云海霞光。",
+    "bortleClass": 5
+  },
+  {
+    "id": "fanjing-shan",
+    "name": "梵净山红云金顶",
+    "lat": 27.9233,
+    "lng": 108.701,
+    "elevation": 2336,
+    "bestFor": [
+      "cloudsea",
+      "sunrise"
+    ],
+    "bestSeasons": [
+      "春",
+      "秋"
+    ],
+    "suggestedDirection": 110,
+    "notes": "示例机位：蘑菇石、金顶与低云，天气变化快。",
+    "bortleClass": 4
+  },
+  {
+    "id": "hehuan-shan",
+    "name": "合欢山武岭",
+    "lat": 24.1375,
+    "lng": 121.2756,
+    "elevation": 3275,
+    "bestFor": [
+      "stargazing",
+      "sunrise",
+      "cloudsea"
+    ],
+    "bestSeasons": [
+      "秋",
+      "冬"
+    ],
+    "suggestedDirection": 180,
+    "notes": "示例机位：高海拔星空与晨昏云海。",
+    "bortleClass": 3
+  },
+  {
+    "id": "gongga-zimei",
+    "name": "子梅垭口",
+    "lat": 29.6587,
+    "lng": 101.8647,
+    "elevation": 4550,
+    "bestFor": [
+      "sunset",
+      "stargazing",
+      "cloudsea"
+    ],
+    "bestSeasons": [
+      "秋",
+      "冬"
+    ],
+    "suggestedDirection": 300,
+    "notes": "示例机位：贡嘎主峰日落与星空，路况和高反风险高。",
+    "bortleClass": 2
+  },
+  {
+    "id": "changbai-west",
+    "name": "长白山西坡",
+    "lat": 42.051,
+    "lng": 127.936,
+    "elevation": 2470,
+    "bestFor": [
+      "cloudsea",
+      "sunrise",
+      "stargazing"
+    ],
+    "bestSeasons": [
+      "夏",
+      "秋",
+      "冬"
+    ],
+    "suggestedDirection": 70,
+    "notes": "示例机位：天池、火山地貌与晨光。",
+    "bortleClass": 3
+  },
+  {
+    "id": "mingsha-mountain",
+    "name": "敦煌鸣沙山",
+    "lat": 40.0922,
+    "lng": 94.668,
+    "elevation": 1240,
+    "bestFor": [
+      "sunset",
+      "stargazing"
+    ],
+    "bestSeasons": [
+      "春",
+      "秋"
+    ],
+    "suggestedDirection": 260,
+    "notes": "示例机位：沙丘剪影、晚霞与银河，避开强风沙。",
+    "bortleClass": 4
+  },
+  {
+    "id": "namco-lake",
+    "name": "纳木错湖畔",
+    "lat": 30.773,
+    "lng": 90.97,
+    "elevation": 4718,
+    "bestFor": [
+      "stargazing",
+      "sunrise",
+      "sunset"
+    ],
+    "bestSeasons": [
+      "夏",
+      "秋"
+    ],
+    "suggestedDirection": 200,
+    "notes": "示例机位：湖面倒影与暗夜星空，海拔高需谨慎。",
+    "bortleClass": 2
+  }
+];

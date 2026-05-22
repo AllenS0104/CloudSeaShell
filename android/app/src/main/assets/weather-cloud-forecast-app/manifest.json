@@ -1,17 +1,14 @@
-{
-  "name": "天气地图与云海预测",
-  "short_name": "天气地图",
+﻿{
+  "name": "云海观测决策台",
+  "short_name": "云海预测",
+  "description": "面向摄影、徒步与山地观测的专业天气分析工具",
   "start_url": "./index.html",
-  "scope": "./",
   "display": "standalone",
-  "background_color": "#14141e",
-  "theme_color": "#0095ff",
+  "orientation": "portrait",
+  "background_color": "#0b2f5b",
+  "theme_color": "#0b2f5b",
   "icons": [
-    {
-      "src": "./assets/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
-    }
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
   ]
 }

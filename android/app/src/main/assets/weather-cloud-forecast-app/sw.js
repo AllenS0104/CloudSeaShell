@@ -1,86 +1,59 @@
-const CACHE_NAME = 'weather-cloud-app-v2';
-const PRECACHE_URLS = [
+﻿const CACHE_NAME = 'cloudsea-v1.2.1';
+const STATIC_ASSETS = [
   './',
   './index.html',
+  './css/style.css',
+  './js/bundle.js',
+  './js/storage.js',
+  './js/services-core.js',
+  './js/favorites-core.js',
+  './js/search-history-core.js',
+  './js/feedback-core.js',
+  './js/adapters/web-http.js',
+  './js/adapters/web-storage.js',
+  './js/adapters/web-ui.js',
+  './js/services.js',
+  './js/fusion.js',
+  './js/feedback.js',
+  './js/search-history.js',
+  './js/favorites.js',
+  './js/app.js',
   './manifest.json',
-  './offline.html',
-  './assets/icon.svg',
-  './styles/main.css',
-  './scripts/app.js',
-  './scripts/state.js',
-  './scripts/dom.js',
-  './scripts/services.js',
-  './scripts/calculations.js',
-  './scripts/map.js',
-  './scripts/render.js',
-  './scripts/location.js',
-  './scripts/bridge.js',
-  './scripts/sos.js',
 ];
 
 self.addEventListener('install', (event) => {
-  self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS)),
+    caches.open(CACHE_NAME)
+      .then(cache => cache.addAll(STATIC_ASSETS))
+      .then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(
-      keys
-        .filter((key) => key !== CACHE_NAME)
-        .map((key) => caches.delete(key)),
-    )).then(() => self.clients.claim()),
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
+    ).then(() => self.clients.claim())
   );
 });
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') {
-    return;
-  }
-
-  const requestUrl = new URL(event.request.url);
-  if (requestUrl.origin !== self.location.origin) {
-    return;
-  }
-
-  if (event.request.mode === 'navigate') {
+  const url = new URL(event.request.url);
+  // API requests: network first, cache fallback
+  if (url.hostname.includes('open-meteo.com')) {
     event.respondWith(
       fetch(event.request)
-        .then((response) => {
-          const cloned = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, cloned));
-          return response;
+        .then(res => {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+          return res;
         })
-        .catch(async () => {
-          const cached = await caches.match(event.request);
-          if (cached) {
-            return cached;
-          }
-
-          const offlinePage = await caches.match('./offline.html');
-          if (offlinePage) {
-            return offlinePage;
-          }
-
-          return caches.match('./index.html');
-        }),
+        .catch(() => caches.match(event.request))
     );
     return;
   }
-
+  // Static assets: cache first
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) {
-        return cached;
-      }
-
-      return fetch(event.request).then((response) => {
-        const cloned = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, cloned));
-        return response;
-      });
-    }),
+    caches.match(event.request).then(cached => cached || fetch(event.request))
   );
 });

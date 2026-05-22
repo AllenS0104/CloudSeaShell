@@ -217,13 +217,24 @@
         }
       }
 
+      // L3 fallback: when input includes a province/city context like 北京 房山 他窖村,
+      // ensure the broader context is also tried (so we degrade to 房山 / 北京 instead of empty).
+      if (contextHint && !candidates.includes(contextHint)) {
+        candidates.push(contextHint);
+      }
+
       let allResults = [];
+      let networkErrors = 0;
+      let totalAttempts = 0;
 
       for (const term of candidates) {
+        totalAttempts++;
         try {
           const data = await requestJson(
             `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(term)}&count=10&language=zh&format=json`,
-            { timeoutMs: 6000, retries: 0 }
+            // L2: longer timeout (10s vs 6s) and one retry on the most specific candidate
+            // to better tolerate slow 5G / no-VPN networks in mainland China.
+            { timeoutMs: 10000, retries: term === raw ? 1 : 0 }
           );
           const results = data?.results;
           if (Array.isArray(results) && results.length > 0) {
@@ -240,12 +251,26 @@
             break;
           }
         } catch (err) {
-          // Continue to next candidate
+          // L1: count network/timeout failures separately from valid empty responses
+          // so we can show a network-specific error if every attempt threw.
+          networkErrors++;
         }
       }
 
       if (allResults.length === 0) {
-        throw new Error('未找到该地址，请尝试更简短的核心地名');
+        // L1: if every API call failed with an exception, treat as a network problem.
+        if (totalAttempts > 0 && networkErrors === totalAttempts) {
+          throw new Error('地址查询网络异常，请检查网络（或切换 Wi-Fi）后重试');
+        }
+
+        // L3: fall back to the bundled waypoints dataset for queries that
+        // Open-Meteo (GeoNames) cannot resolve (typically village-level names).
+        const waypointMatches = matchBuiltinWaypoints(raw);
+        if (waypointMatches.length > 0) {
+          allResults = waypointMatches;
+        } else {
+          throw new Error(`未找到 "${raw}"，建议改用所在乡镇 / 区县 / 景区名（Open-Meteo 数据库不含村级地名）`);
+        }
       }
 
       if (contextHint) {
@@ -264,6 +289,57 @@
       });
 
       return allResults.slice(0, 8);
+    }
+
+    // L3 helper: fuzzy-match the raw query against the bundled waypoints dataset.
+    // Reachable in CommonJS (miniprogram, node) and via UMD globals (web build).
+    function matchBuiltinWaypoints(raw) {
+      let all = [];
+      try {
+        if (typeof require === 'function') {
+          try {
+            const mod = require('./waypoints-data');
+            if (mod && Array.isArray(mod.WAYPOINTS)) all = mod.WAYPOINTS;
+          } catch (e) { /* fallthrough to globals */ }
+        }
+        if (all.length === 0 && typeof globalThis !== 'undefined') {
+          const g = globalThis;
+          if (g.CloudSeaCore && g.CloudSeaCore.waypoints && Array.isArray(g.CloudSeaCore.waypoints.WAYPOINTS)) {
+            all = g.CloudSeaCore.waypoints.WAYPOINTS;
+          } else if (g.CloudSea && g.CloudSea.waypoints && Array.isArray(g.CloudSea.waypoints.WAYPOINTS)) {
+            all = g.CloudSea.waypoints.WAYPOINTS;
+          }
+        }
+      } catch (e) {
+        return [];
+      }
+
+      if (!Array.isArray(all) || all.length === 0) return [];
+
+      const tokens = raw
+        .replace(/[\s,，、]+/g, ' ')
+        .split(/\s+/)
+        .filter(t => t.length >= 2);
+
+      const matches = [];
+      for (const wp of all) {
+        if (!wp || !wp.name) continue;
+        if (!Number.isFinite(wp.lat) || !Number.isFinite(wp.lng)) continue;
+        const hit = raw.includes(wp.name)
+          || wp.name.includes(raw)
+          || tokens.some(t => wp.name.includes(t));
+        if (hit) {
+          matches.push({
+            latitude: wp.lat,
+            longitude: wp.lng,
+            name: `${wp.name}（内置参考机位）`,
+            admin1: '',
+            elevation: typeof wp.elevation === 'number' ? wp.elevation : null,
+            matchedTerm: 'waypoint:' + (wp.id || wp.name),
+          });
+        }
+      }
+      return matches;
     }
 
     function getLocation() {
