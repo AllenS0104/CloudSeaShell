@@ -1,6 +1,6 @@
 /* SHARED CORE — single source of truth, do not edit per-end copies */
 const DEFAULT_WIDTH = 750;
-const DEFAULT_HEIGHT = 1334;
+const DEFAULT_HEIGHT = 1700;
 
 const PALETTES = {
   dark: {
@@ -151,6 +151,10 @@ function buildPosterModel(state) {
   const scoreText = score === null ? '--' : String(Math.round(score));
   const dateText = firstValue(safeState.dateLabel, safeState.dayLabel, safeState.dayLabels?.[safeState.selectedDayIndex || 0], safeState.date, new Date().toLocaleDateString('zh-CN'));
   const locationName = firstValue(safeState.locationName, safeState.location?.name, safeState.location, '当前位置');
+  const lat = toNumber(firstValue(safeState.lat, safeState.location?.lat, safeState.latitude));
+  const lon = toNumber(firstValue(safeState.lon, safeState.lng, safeState.location?.lon, safeState.longitude));
+  const coordsText = (lat !== null && lon !== null) ? `${lat.toFixed(4)}, ${lon.toFixed(4)}` : '';
+  const elevation = toNumber(firstValue(safeState.elevation, safeState.currentElevation));
   const cloudBase = firstValue(safeState.currentCloudBase, safeState.analysis?.cloudBase, primaryData.cloudBase);
   const visibility = firstValue(safeState.currentVisibility, safeState.analysis?.visibility, primaryData.visibility);
   const wind = firstValue(safeState.currentWind, safeState.analysis?.windSpeed, primaryData.windSpeed);
@@ -166,6 +170,21 @@ function buildPosterModel(state) {
     { label: '能见度', value: formatValue(toNumber(visibility) !== null && Number(visibility) > 1000 ? Number(visibility) / 1000 : visibility, 'km', 1), color: palette.warning },
     { label: '风速', value: formatValue(wind, 'm/s', 1), color: palette.star },
   ];
+
+  const predictionCards = predictions.map(item => {
+    const data = item.data || {};
+    return {
+      type: item.type,
+      icon: item.icon,
+      key: item.key,
+      score: item.score,
+      scoreText: item.score === null ? '--' : String(Math.round(item.score)),
+      label: firstValue(data.resultText, data.label, scoreLabel(item.score)),
+      summary: firstValue(data.summary, ''),
+      reasons: asArray(data.reasons).map(normalizeReason).filter(Boolean).slice(0, 2),
+      color: palette[item.colorKey] || palette.primary,
+    };
+  });
 
   const layout = [
     { type: 'title', text: `${locationName}`, value: String(dateText), color: palette.text },
@@ -184,6 +203,8 @@ function buildPosterModel(state) {
     height: DEFAULT_HEIGHT,
     palette,
     location: String(locationName),
+    coordsText,
+    elevation,
     date: String(dateText),
     predictionType: primary.type,
     badge: `${primary.icon} ${primary.type}`,
@@ -191,6 +212,7 @@ function buildPosterModel(state) {
     scoreText,
     confidence: confidenceLabel(safeState, score),
     summary: firstValue(primaryData.summary, safeState.analysis?.summary, ''),
+    predictions: predictionCards,
     kpis,
     reasons,
     hints,

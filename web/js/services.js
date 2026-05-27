@@ -1,6 +1,6 @@
-(function(global) {
-  'use strict';
-
+(function(global) {
+  'use strict';
+
   var CS = global.CloudSea = global.CloudSea || {};
   var core = global.CloudSeaCore;
   var adapters = global.CloudSeaAdapters || {};
@@ -10,14 +10,14 @@
   function requestNativeBridge(action, payload, timeoutMs) {
     return new Promise(function(resolve, reject) {
       if (!global.ReactNativeWebView || typeof global.ReactNativeWebView.postMessage !== 'function') {
-        reject(new Error('原生定位桥接不可用'));
+        reject(new Error('原生桥接不可用'));
         return;
       }
 
       var requestId = 'web-' + Date.now() + '-' + (++bridgeSeq);
       var timer = setTimeout(function() {
         delete bridgePending[requestId];
-        reject(new Error('定位请求超时'));
+        reject(new Error('原生桥接请求超时'));
       }, timeoutMs || 35000);
 
       bridgePending[requestId] = {
@@ -40,6 +40,10 @@
     });
   }
 
+  function isNativeBridgeAvailable() {
+    return !!(global.ReactNativeWebView && typeof global.ReactNativeWebView.postMessage === 'function');
+  }
+
   global.onBridgeResponse = function(requestId, payload) {
     var pending = bridgePending[requestId];
     if (!pending) return;
@@ -51,7 +55,7 @@
     var pending = bridgePending[requestId];
     if (!pending) return;
     delete bridgePending[requestId];
-    pending.reject(new Error((error && error.message) || '原生定位失败'));
+    pending.reject(new Error((error && error.message) || '原生桥接失败'));
   };
 
   function getBrowserLocation() {
@@ -95,12 +99,17 @@
       });
     },
   });
-
-  CS.services = {
-    fetchWeather: services.fetchWeather,
-    fetchElevation: services.fetchElevation,
-    geocodeAddress: services.geocodeAddress,
-    getLocation: services.getLocation,
-  };
-  CS._webRequest = services._requestJson;
-})(window);
+
+  CS.services = {
+    fetchWeather: services.fetchWeather,
+    fetchElevation: services.fetchElevation,
+    geocodeAddress: services.geocodeAddress,
+    reverseGeocode: services.reverseGeocode,
+    getLocation: services.getLocation,
+  };
+  CS._webRequest = services._requestJson;
+  CS.bridge = {
+    request: requestNativeBridge,
+    isAvailable: isNativeBridgeAvailable,
+  };
+})(window);

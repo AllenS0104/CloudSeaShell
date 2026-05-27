@@ -109,9 +109,38 @@
     state.lon = point.lon;
     state.locationName = '坐标 ' + point.lat.toFixed(4) + ', ' + point.lon.toFixed(4);
     showLoading();
+    enrichLocationName(point.lat, point.lon);
     fetchAll(point.lat, point.lon).catch(function(err) {
       console.warn('[map] fetch after tap failed', err && err.message);
     });
+  }
+
+  function enrichLocationName(lat, lon) {
+    if (!api || typeof api.reverseGeocode !== 'function') return Promise.resolve(null);
+    return api.reverseGeocode(lat, lon).then(function(place) {
+      if (!place || !place.display) return null;
+      if (state.lat !== lat || state.lon !== lon) return place;
+      var coords = lat.toFixed(4) + ', ' + lon.toFixed(4);
+      var alreadyHasPlace = /\(.+\)$/.test(state.locationName || '');
+      if (alreadyHasPlace && state.locationName.indexOf(place.display) >= 0) return place;
+      var baseName = /^坐标 /.test(state.locationName || '') ? '坐标 ' + coords : (state.locationName || '');
+      var nextName = baseName + ' (' + place.display + ')';
+      state.locationName = nextName;
+      state.locationPlace = place;
+      setText('location-name', nextName);
+      return place;
+    }).catch(function() { return null; });
+  }
+
+  async function ensureLocationEnriched() {
+    if (!state.lat || !state.lon) return;
+    var name = state.locationName || '';
+    var needsEnrich = /^坐标 /.test(name) && !/\(.+\)$/.test(name);
+    if (!needsEnrich && state.locationPlace) return;
+    if (!needsEnrich) return;
+    try {
+      await enrichLocationName(state.lat, state.lon);
+    } catch (_) { /* ignore */ }
   }
 
   function bindEvents() {
@@ -268,6 +297,9 @@
     hide('error-state');
     hide('main-content');
     showStatus('正在获取海拔数据...', 'info');
+    if (state.locationName === '当前位置' || /^坐标 /.test(state.locationName || '')) {
+      enrichLocationName(lat, lon);
+    }
 
     try {
       var elevation = await api.fetchElevation(lat, lon);
@@ -1176,34 +1208,142 @@
   }
 
   async function onSharePoster() {
-    if (!posterRenderer || !posterRenderer.downloadPoster) {
+    if (!posterRenderer || !posterRenderer.renderPosterToBlob) {
       showToast('海报功能未加载');
       return;
     }
     showStatus('正在生成海报...', 'info');
+    await ensureLocationEnriched();
     await new Promise(function(resolve) { requestAnimationFrame(resolve); });
     try {
+      var posterResult = await posterRenderer.renderPosterToBlob(state, {});
+      var bridge = (CS && CS.bridge && CS.bridge.isAvailable && CS.bridge.isAvailable()) ? CS.bridge : null;
+      if (bridge) {
+        var dataUrl = await blobToDataUrl(posterResult.blob);
+        var titleText = (state.locationName || '云海观测') + ' 云海/晚霞/星空预报';
+        var shareText = buildShareText();
+        try {
+          await bridge.request('share.image', {
+            title: titleText,
+            text: shareText,
+            dataUrl: dataUrl,
+            filename: posterFilename(),
+          }, 60000);
+          showStatus('海报已生成，请在系统分享面板选择目标', 'success');
+          return;
+        } catch (nativeErr) {
+          console.warn('[poster] share.image failed, trying share.poster', nativeErr && nativeErr.message);
+          var base64Png = dataUrl.indexOf(',') >= 0 ? dataUrl.split(',')[1] : dataUrl;
+          await bridge.request('share.poster', {
+            title: titleText,
+            text: shareText,
+            base64Png: base64Png,
+            filename: posterFilename(),
+          }, 30000);
+          showStatus('海报已生成（文字分享）', 'success');
+          return;
+        }
+      }
       await posterRenderer.downloadPoster(state, posterFilename());
       showStatus('海报已生成并开始下载', 'success');
     } catch (err) {
-      showStatus('海报生成失败：' + err.message, 'warning');
+      showStatus('海报生成失败：' + (err && err.message ? err.message : err), 'warning');
     }
   }
 
-  function onShare() {
-    var score = state.analysis?.score ?? 0;
-    var title = state.locationName + ' 云海预测：' + score + ' 分';
-    var text = title + '\n' + (state.analysis?.summary || '');
-    var fullText = text + '\n' + location.href;
+  function blobToDataUrl(blob) {
+    return new Promise(function(resolve, reject) {
+      var reader = new FileReader();
+      reader.onloadend = function() { resolve(String(reader.result || '')); };
+      reader.onerror = function() { reject(new Error('海报数据读取失败')); };
+      reader.readAsDataURL(blob);
+    });
+  }
 
-    // 1) Web Share API (rarely available under file://)
-    if (typeof navigator.share === 'function') {
-      navigator.share({ title: '云海观测决策台', text: text, url: location.href })
-        .then(function() { /* ok */ })
-        .catch(function() { fallbackCopy(fullText); });
+  function buildShareText() {
+    var lines = [];
+    var locationLine = '📍 ' + (state.locationName || '观测点');
+    if (state.elevation != null) locationLine += '  ·  海拔 ' + Math.round(state.elevation) + 'm';
+    lines.push(locationLine);
+    var dateLabel = (state.dayLabels && state.dayLabels[state.selectedDayIndex]) || new Date().toLocaleDateString('zh-CN');
+    lines.push('📅 ' + dateLabel);
+    lines.push('');
+
+    var preds = [];
+    if (state.analysis) preds.push({ icon: '☁️', name: '云海', score: state.analysis.score, label: state.analysis.resultText || state.analysis.label, summary: state.analysis.summary });
+    if (state.glowAnalysis) preds.push({ icon: '🌅', name: '晚霞', score: state.glowAnalysis.score, label: state.glowAnalysis.resultText || state.glowAnalysis.label, summary: state.glowAnalysis.summary });
+    if (state.starInfo) preds.push({ icon: '🌌', name: '星空', score: state.starInfo.score, label: state.starInfo.resultText || state.starInfo.label, summary: state.starInfo.summary });
+
+    preds.forEach(function(item) {
+      if (item.score == null) return;
+      var scoreText = Math.round(Number(item.score));
+      var line = item.icon + ' ' + item.name + '：' + scoreText + ' 分';
+      if (item.label) line += '（' + item.label + '）';
+      lines.push(line);
+      if (item.summary) lines.push('   · ' + item.summary);
+    });
+
+    var reasons = (state.analysis && Array.isArray(state.analysis.reasons))
+      ? state.analysis.reasons.slice(0, 3).map(function(r) { return typeof r === 'string' ? r : (r.text || r.label || r.message || ''); }).filter(Boolean)
+      : [];
+    if (reasons.length) {
+      lines.push('');
+      lines.push('💡 主要依据：');
+      reasons.forEach(function(r) { lines.push('  · ' + r); });
+    }
+
+    var hourly = [];
+    if (state.currentHumidity != null && state.currentHumidity !== '--') hourly.push('湿度 ' + state.currentHumidity + '%');
+    if (state.currentCloudCover != null && state.currentCloudCover !== '--') hourly.push('云量 ' + state.currentCloudCover + '%');
+    if (state.currentWind != null && state.currentWind !== '--') hourly.push('风速 ' + state.currentWind + ' m/s');
+    if (state.currentDewGap != null && state.currentDewGap !== '--') hourly.push('露点差 ' + state.currentDewGap + '°C');
+    if (hourly.length) {
+      lines.push('');
+      lines.push('🌡️ ' + hourly.join('  ·  '));
+    }
+
+    var wp = state.selectedWaypoint || (Array.isArray(state.nearbyWaypoints) && state.nearbyWaypoints[0]);
+    if (wp && wp.name) {
+      lines.push('');
+      var wpLine = '📷 推荐机位：' + wp.name;
+      if (wp.distanceKm != null) wpLine += '（' + wp.distanceKm + 'km）';
+      lines.push(wpLine);
+    }
+
+    lines.push('');
+    lines.push('— CloudSeaShell · 云海观测决策台');
+    return lines.join('\n');
+  }
+
+  function onShare() {
+    ensureLocationEnriched().then(function() {
+      doShare();
+    });
+  }
+
+  function doShare() {
+    var text = buildShareText();
+    var titleScore = (state.analysis && state.analysis.score != null) ? state.analysis.score : null;
+    var titleText = (state.locationName || '观测点') + ' 云海/晚霞/星空预报' + (titleScore != null ? '：' + Math.round(titleScore) + ' 分' : '');
+
+    var bridge = (CS && CS.bridge && CS.bridge.isAvailable && CS.bridge.isAvailable()) ? CS.bridge : null;
+    if (bridge) {
+      bridge.request('share.text', { title: titleText, text: text }, 30000)
+        .then(function() { /* native dialog opened */ })
+        .catch(function(err) {
+          showStatus('原生分享失败：' + (err && err.message ? err.message : err), 'warning');
+          fallbackCopy(text);
+        });
       return;
     }
-    fallbackCopy(fullText);
+
+    if (typeof navigator.share === 'function') {
+      navigator.share({ title: titleText, text: text })
+        .then(function() { /* ok */ })
+        .catch(function() { fallbackCopy(text); });
+      return;
+    }
+    fallbackCopy(text);
   }
 
   function fallbackCopy(text) {

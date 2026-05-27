@@ -20,7 +20,7 @@ describe('poster layout model', () => {
     });
 
     expect(model.width).toBe(750);
-    expect(model.height).toBe(1334);
+    expect(model.height).toBe(1700);
     expect(model.location).toBe('黄山');
     expect(model.predictionType).toBe('云海');
     expect(model.score).toBe(76);

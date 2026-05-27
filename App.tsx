@@ -83,6 +83,7 @@ type BridgeActionDependencies = {
 type NativeCloudSeaCapabilities = {
   shareImage?: (payload: {
     title: string;
+    text?: string;
     dataUrl: string;
     filename: string;
   }) => Promise<{
@@ -331,6 +332,7 @@ export async function handleBridgeRequest(
         const title = String(request.payload?.title || '云海观测海报');
         const dataUrl = String(request.payload?.dataUrl || '');
         const filename = String(request.payload?.filename || 'cloud-sea-brief.png');
+        const text = String(request.payload?.text || '');
         if (!dataUrl) {
           throw {
             code: 'INVALID_IMAGE',
@@ -345,6 +347,7 @@ export async function handleBridgeRequest(
         }
         const result = await cloudSeaCapabilities.shareImage({
           title,
+          text,
           dataUrl,
           filename,
         });

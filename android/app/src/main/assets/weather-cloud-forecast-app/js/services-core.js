@@ -532,10 +532,96 @@
       return Promise.reject(new Error('定位端口未配置'));
     }
 
+    async function reverseGeocode(lat, lon) {
+      const latitude = Number(lat);
+      const longitude = Number(lon);
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+      const cacheKey = `revgeo_${latitude.toFixed(3)}_${longitude.toFixed(3)}`;
+      const cached = getCachedData(cacheKey);
+      if (cached) return cached;
+
+      const providers = [
+        () => reverseGeocodeBigDataCloud(latitude, longitude),
+        () => reverseGeocodeNominatim(latitude, longitude),
+      ];
+
+      for (const provider of providers) {
+        try {
+          const result = await provider();
+          if (result && result.display) {
+            setCachedData(cacheKey, result, 24 * 60 * 60 * 1000);
+            return result;
+          }
+        } catch (err) {
+          /* try next provider */
+        }
+      }
+      return null;
+    }
+
+    async function reverseGeocodeBigDataCloud(latitude, longitude) {
+      const data = await requestJson(
+        `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=zh`,
+        { timeoutMs: 8000, retries: 0 }
+      );
+      if (!data) return null;
+      const parts = uniqueAddressParts([
+        data.locality,
+        data.city,
+        data.principalSubdivision,
+        data.countryName,
+      ]);
+      const display = parts.join(' ');
+      if (!display) return null;
+      return {
+        display,
+        primary: parts[0] || display,
+        parts,
+        country: data.countryName || '',
+        source: 'bigdatacloud',
+      };
+    }
+
+    async function reverseGeocodeNominatim(latitude, longitude) {
+      const data = await requestJson(
+        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&zoom=14&accept-language=zh-CN`,
+        { timeoutMs: 8000, retries: 0, header: { Accept: 'application/json' } }
+      );
+      const address = (data && data.address) || {};
+      const parts = uniqueAddressParts([
+        address.village || address.hamlet || address.town || address.suburb || address.neighbourhood || address.locality,
+        address.tourism || address.attraction || address.natural || address.peak,
+        address.county || address.city_district || address.city || address.municipality,
+        address.state || address.province,
+      ]);
+      const display = parts.join(' ');
+      if (!display) return null;
+      return {
+        display,
+        primary: parts[0] || display,
+        parts,
+        country: address.country || '',
+        source: 'nominatim',
+      };
+    }
+
+    function uniqueAddressParts(parts) {
+      const seen = new Set();
+      const out = [];
+      for (const part of parts) {
+        const text = String(part || '').trim();
+        if (!text || seen.has(text)) continue;
+        seen.add(text);
+        out.push(text);
+      }
+      return out;
+    }
+
     return {
       fetchWeather,
       fetchElevation,
       geocodeAddress,
+      reverseGeocode,
       getLocation,
       _requestJson: requestJson,
     };

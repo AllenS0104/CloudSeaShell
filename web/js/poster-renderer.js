@@ -5,7 +5,7 @@
   var buildPosterModel = layout && layout.buildPosterModel;
   var posterPalette = layout && layout.posterPalette;
   var DEFAULT_WIDTH = 750;
-  var DEFAULT_HEIGHT = 1334;
+  var DEFAULT_HEIGHT = 1700;
 
   function setFont(ctx, size, weight) {
     ctx.font = (weight || 400) + ' ' + size + 'px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
@@ -88,8 +88,15 @@
     ctx.fillStyle = palette.primary || '#3aa4ff'; ctx.textAlign = 'center'; ctx.fillText(badgeText, width - margin - badgeWidth / 2, 134); ctx.textAlign = 'left';
     y += 116;
     setFont(ctx, 28, 400); ctx.fillStyle = palette.textSecondary || '#aab4c5'; ctx.fillText(model.date || '', margin, y);
+    if (model.coordsText) {
+      y += 38;
+      setFont(ctx, 22, 400); ctx.fillStyle = palette.textMuted || '#6f7d95';
+      var coordsLine = '📍 ' + model.coordsText;
+      if (model.elevation != null) coordsLine += '  ·  海拔 ' + Math.round(model.elevation) + ' m';
+      ctx.fillText(coordsLine, margin, y);
+    }
 
-    y += 64;
+    y += 60;
     fillRoundRect(ctx, margin, y, width - margin * 2, 258, 32, palette.card || 'rgba(255,255,255,0.10)');
     strokeRoundRect(ctx, margin, y, width - margin * 2, 258, 32, palette.cardBorder || 'rgba(173,199,255,0.18)');
     setFont(ctx, 30, 600); ctx.fillStyle = palette.textSecondary || '#aab4c5'; ctx.fillText((model.predictionType || '预测') + '综合评分', margin + 36, y + 52);
@@ -99,6 +106,33 @@
     setFont(ctx, 28, 500); ctx.fillStyle = palette.textSecondary || '#aab4c5'; drawWrapped(ctx, model.summary || '', margin + 310, y + 92, width - margin * 2 - 350, 40, 3);
 
     y += 304;
+    var predictionCards = (model.predictions || []).slice(0, 3);
+    if (predictionCards.length > 0) {
+      setFont(ctx, 30, 800); ctx.fillStyle = palette.text || '#eef4ff'; ctx.fillText('三大预测', margin, y); y += 36;
+      var stripGap = 16;
+      var stripCount = predictionCards.length;
+      var stripWidth = (width - margin * 2 - stripGap * (stripCount - 1)) / stripCount;
+      var stripHeight = 192;
+      predictionCards.forEach(function(card, index) {
+        var sx = margin + index * (stripWidth + stripGap);
+        fillRoundRect(ctx, sx, y, stripWidth, stripHeight, 24, 'rgba(255,255,255,0.08)');
+        strokeRoundRect(ctx, sx, y, stripWidth, stripHeight, 24, palette.cardBorder || 'rgba(173,199,255,0.18)');
+        setFont(ctx, 26, 700); ctx.fillStyle = palette.textSecondary || '#aab4c5';
+        ctx.fillText((card.icon || '') + ' ' + (card.type || ''), sx + 18, y + 36);
+        setFont(ctx, 52, 900); ctx.fillStyle = card.color || palette.primary;
+        ctx.fillText(card.scoreText || '--', sx + 18, y + 92);
+        setFont(ctx, 22, 600); ctx.fillStyle = palette.text || '#eef4ff';
+        ctx.fillText('/100', sx + 18 + ctx.measureText(card.scoreText || '--').width + 6, y + 88);
+        setFont(ctx, 22, 600); ctx.fillStyle = card.color || palette.primary;
+        ctx.fillText(String(card.label || ''), sx + 18, y + 128);
+        if (card.summary) {
+          setFont(ctx, 19, 400); ctx.fillStyle = palette.textSecondary || '#aab4c5';
+          drawWrapped(ctx, String(card.summary), sx + 18, y + 156, stripWidth - 36, 24, 2);
+        }
+      });
+      y += stripHeight + 32;
+    }
+
     var kpis = (model.kpis || []).slice(0, 4);
     var gap = 20;
     var cellWidth = (width - margin * 2 - gap) / 2;

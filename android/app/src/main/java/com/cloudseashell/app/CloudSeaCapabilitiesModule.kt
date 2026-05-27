@@ -53,6 +53,7 @@ class CloudSeaCapabilitiesModule(private val reactContext: ReactApplicationConte
   fun shareImage(payload: ReadableMap, promise: Promise) {
     try {
       val title = payload.getString("title") ?: "云海观测海报"
+      val text = if (payload.hasKey("text")) payload.getString("text") ?: "" else ""
       val dataUrl = payload.getString("dataUrl") ?: throw IllegalArgumentException("dataUrl missing")
       val filename = payload.getString("filename") ?: "cloud-sea-brief.png"
       val file = createSharedImageFile(dataUrl, filename)
@@ -66,6 +67,7 @@ class CloudSeaCapabilitiesModule(private val reactContext: ReactApplicationConte
         type = "image/png"
         putExtra(Intent.EXTRA_STREAM, uri)
         putExtra(Intent.EXTRA_SUBJECT, title)
+        if (text.isNotBlank()) putExtra(Intent.EXTRA_TEXT, text)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
       }
