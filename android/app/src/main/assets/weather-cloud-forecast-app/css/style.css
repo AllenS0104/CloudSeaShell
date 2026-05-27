@@ -100,11 +100,70 @@ html, body {
 
 /* === Map === */
 .map-container {
-  width: 100%; height: 200px; border-radius: 8px;
+  width: 100%; height: clamp(360px, 52vh, 560px); border-radius: 10px;
   overflow: hidden; margin-bottom: 10px; background: rgba(0,0,0,0.3);
+  position: relative;
 }
 #map-frame {
   width: 100%; height: 100%; border: none; border-radius: 8px;
+}
+#map { width: 100%; height: 100%; border-radius: 8px; z-index: 0; }
+.map-hint {
+  position: absolute; bottom: 6px; left: 6px; right: 6px;
+  background: rgba(13,21,38,0.85); color: #e0e6f0;
+  padding: 4px 8px; border-radius: 6px; font-size: 11px;
+  z-index: 600; pointer-events: none; text-align: center;
+  transition: opacity 0.4s;
+}
+.map-hint.fade { opacity: 0; }
+/* Leaflet tweaks for dark theme */
+.leaflet-container { background: #0d1526; font-family: inherit; }
+.leaflet-control-attribution { font-size: 9px; background: rgba(13,21,38,0.7) !important; color: #aab4c5 !important; }
+.leaflet-control-attribution a { color: #3aa4ff !important; }
+.leaflet-popup-content-wrapper, .leaflet-popup-tip {
+  background: #0d1526; color: #e0e6f0; border: 1px solid #2a3858;
+}
+.leaflet-popup-content { font-size: 13px; line-height: 1.5; margin: 8px 12px; }
+.cloudsea-location-marker {
+  width: 34px !important;
+  height: 44px !important;
+  background: transparent;
+  border: 0;
+}
+.cloudsea-location-pin {
+  position: relative;
+  display: block;
+  width: 30px;
+  height: 30px;
+  margin: 0 auto;
+  border: 3px solid #ffffff;
+  border-radius: 50% 50% 50% 0;
+  background: linear-gradient(135deg, #2f8cff, #00d4ff);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.45), 0 0 0 5px rgba(58,164,255,0.2);
+  transform: rotate(-45deg);
+}
+.cloudsea-location-pin::before {
+  content: '';
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 8px rgba(255,255,255,0.8);
+}
+.cloudsea-location-pin::after {
+  content: '';
+  position: absolute;
+  right: -11px;
+  bottom: -11px;
+  width: 18px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.35);
+  filter: blur(2px);
+  transform: rotate(45deg);
 }
 
 /* === Weather Main === */
@@ -673,6 +732,7 @@ html, body {
   .page-container { max-width: 720px; padding: 20px; padding-bottom: 80px; }
   .card { padding: 20px; margin-bottom: 14px; }
   .header-title { font-size: 28px; }
+  .map-container { height: clamp(420px, 55vh, 640px); }
   .stats-grid { gap: 12px; }
   .stat-card { min-width: 140px; padding: 14px; }
   .photo-panel { max-width: 540px; margin: 0 auto; border-radius: 14px 14px 0 0; }

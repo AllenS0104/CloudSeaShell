@@ -111,6 +111,19 @@ type NativeLocalNotifications = {
 const cloudSeaCapabilities = NativeModules.CloudSeaCapabilities as NativeCloudSeaCapabilities | undefined;
 const localNotifications = NativeModules.LocalNotifications as NativeLocalNotifications | undefined;
 
+type NativeLocationPosition = {
+  coords: {
+    latitude: number;
+    longitude: number;
+  };
+};
+
+type LocationRequestOptions = {
+  enableHighAccuracy?: boolean;
+  timeout?: number;
+  maximumAge?: number;
+};
+
 function escapeForInjectedJavaScript(value: unknown) {
   return JSON.stringify(value).replace(/</g, '\\u003c');
 }
@@ -137,18 +150,57 @@ async function ensureLocationPermission() {
     || granted[PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED;
 }
 
-function getCurrentPosition() {
-  return new Promise((resolve, reject) => {
+function getCurrentPosition(options: Required<LocationRequestOptions>) {
+  return new Promise<NativeLocationPosition>((resolve, reject) => {
     Geolocation.getCurrentPosition(
       (position) => resolve(position),
       (error) => reject(error),
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 60000,
-      },
+      options,
     );
   });
+}
+
+function getLocationErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    return String((error as { message?: unknown }).message || '定位失败');
+  }
+  return '定位失败';
+}
+
+async function getBestCurrentPosition(requestOptions?: LocationRequestOptions) {
+  const requestedTimeout = Number(requestOptions?.timeout);
+  const requestedMaximumAge = Number(requestOptions?.maximumAge);
+  const requestedHighAccuracy = requestOptions?.enableHighAccuracy === true;
+  const maximumAge = Number.isFinite(requestedMaximumAge) && requestedMaximumAge >= 0
+    ? requestedMaximumAge
+    : 10 * 60 * 1000;
+  const timeout = Number.isFinite(requestedTimeout) && requestedTimeout > 0
+    ? Math.max(requestedTimeout, 20000)
+    : 30000;
+
+  const attempts: Array<Required<LocationRequestOptions>> = [
+    { enableHighAccuracy: false, timeout: 8000, maximumAge },
+    { enableHighAccuracy: false, timeout, maximumAge: 0 },
+    { enableHighAccuracy: requestedHighAccuracy, timeout: Math.max(timeout, 30000), maximumAge: 0 },
+  ];
+  let lastError: unknown = null;
+
+  for (const attempt of attempts) {
+    try {
+      return await getCurrentPosition(attempt);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw {
+    code: 'LOCATION_TIMEOUT',
+    message: `定位超时：${getLocationErrorMessage(lastError)}。请确认系统定位已开启，或稍后重试。`,
+    recoverable: true,
+  };
 }
 
 async function openExternalMap(latitude: number, longitude: number, label: string) {
@@ -238,9 +290,11 @@ export async function handleBridgeRequest(
           };
         }
 
-        const position = await getCurrentPosition() as {
-          coords: { latitude: number; longitude: number };
-        };
+        const position = await getBestCurrentPosition({
+          enableHighAccuracy: request.payload.enableHighAccuracy === true,
+          timeout: Number(request.payload.timeout),
+          maximumAge: Number(request.payload.maximumAge),
+        });
         respondSuccess(requestId, {
           coords: {
             latitude: position.coords.latitude,

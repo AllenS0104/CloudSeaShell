@@ -80,9 +80,38 @@
   // ===== Initialization =====
   function init() {
     bindEvents();
+    initMap();
     renderSearchHistory();
     renderFavorites();
     autoLocate();
+  }
+
+  function initMap() {
+    if (!CS.map || typeof CS.map.init !== 'function') return;
+    CS.map.init({ lat: state.lat, lon: state.lon, zoom: 9 });
+    CS.map.onSelect(onMapTap);
+  }
+
+  function refreshMapLayout() {
+    if (!CS.map || typeof CS.map.invalidateSize !== 'function') return;
+    [0, 120, 350, 800].forEach(function(delay) {
+      setTimeout(function() {
+        CS.map.invalidateSize();
+      }, delay);
+    });
+  }
+
+  function onMapTap(point) {
+    if (!point || !Number.isFinite(point.lat) || !Number.isFinite(point.lon)) return;
+    var hint = $('map-hint');
+    if (hint) hint.classList.add('fade');
+    state.lat = point.lat;
+    state.lon = point.lon;
+    state.locationName = '坐标 ' + point.lat.toFixed(4) + ', ' + point.lon.toFixed(4);
+    showLoading();
+    fetchAll(point.lat, point.lon).catch(function(err) {
+      console.warn('[map] fetch after tap failed', err && err.message);
+    });
   }
 
   function bindEvents() {
@@ -377,6 +406,7 @@
     hideLoading();
     hide('error-state');
     show('main-content');
+    refreshMapLayout();
 
     // Hero card
     if (heroCard) {
@@ -390,12 +420,14 @@
     }
 
     // Map
-    var mapFrame = $('map-frame');
-    if (mapFrame) {
-      mapFrame.src = 'https://www.openstreetmap.org/export/embed.html?bbox='
-        + (state.lon - 0.05) + ',' + (state.lat - 0.05) + ','
-        + (state.lon + 0.05) + ',' + (state.lat + 0.05)
-        + '&layer=mapnik&marker=' + state.lat + ',' + state.lon;
+    if (CS.map && typeof CS.map.setLocation === 'function') {
+      CS.map.setLocation(state.lat, state.lon);
+      var popup = '<strong>' + esc(state.locationName || '观测点')
+        + '</strong><br>云海 ' + (state.analysis && state.analysis.score != null ? state.analysis.score + '分' : '--')
+        + (state.glowAnalysis && state.glowAnalysis.score != null ? ' · 晚霞 ' + state.glowAnalysis.score + '分' : '')
+        + (state.starInfo && state.starInfo.score != null ? ' · 星空 ' + state.starInfo.score + '分' : '');
+      CS.map.setMarkerPopup(popup);
+      refreshMapLayout();
     }
 
     // Weather main
