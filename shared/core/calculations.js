@@ -19,6 +19,8 @@ const {
   precipitationPenalty,
   scoreTimeWindow,
   scoreInversion,
+  scoreVerticalInversion,
+  scoreCapeStability,
   scoreToConfidence,
   compositeReliabilityPenalty,
 } = scoring;
@@ -60,11 +62,22 @@ function buildReasons({
   timeScore,
   inversionDetected,
   inversionStrength,
+  inversionLayer,
+  cape,
+  capePenalty,
 }) {
   const reasons = [];
 
   if (inversionDetected) {
-    reasons.push(`检测到逆温层（温差 ${inversionStrength.toFixed(1)}°C），有利于低云/雾层稳定维持。`);
+    if (inversionLayer) {
+      reasons.push(`检测到逆温层（${inversionLayer} 比地面高 ${inversionStrength.toFixed(1)}°C），暖盖压制对流，有利低云/雾层稳定堆叠。`);
+    } else {
+      reasons.push(`检测到逆温层（温差 ${inversionStrength.toFixed(1)}°C），有利于低云/雾层稳定维持。`);
+    }
+  }
+
+  if (Number(capePenalty) >= 3) {
+    reasons.push(`对流潜势偏强（CAPE ${Math.round(cape)} J/kg），层结不稳定不利于稳定云海形成。`);
   }
 
   if (gapToElevation >= 50) {
@@ -135,6 +148,9 @@ function analyzeCloudSeaSample({
   inversionScore = 0,
   inversionDetected = false,
   inversionStrength = 0,
+  inversionLayer = null,
+  capePenalty = 0,
+  cape = 0,
 }) {
   const safeTemperature = Number(temperature ?? 0);
   const safeHumidity = Number(humidity ?? 0);
@@ -177,7 +193,7 @@ function analyzeCloudSeaSample({
     dewPointGap,
     precipitationProbability: safePrecipitationProbability,
   });
-  const score = clamp(baseScore - penalty - compositePenalty, 0, 100);
+  const score = clamp(baseScore - penalty - compositePenalty - Number(capePenalty || 0), 0, 100);
   const confidence = scoreToConfidence(score);
   const suggestion = score >= 55;
 
@@ -195,8 +211,15 @@ function analyzeCloudSeaSample({
     precipitationAmount: safePrecipitationAmount,
     gapToElevation,
     timeScore,
+    inversionScore,
+    inversionDetected,
+    inversionStrength,
+    inversionLayer,
+    cape: Number(cape || 0),
+    capePenalty: Number(capePenalty || 0),
     baseScore,
     penalty,
+    compositePenalty,
     score,
     confidenceLabel: confidence.label,
     confidenceLevel: confidence.level,
@@ -219,6 +242,9 @@ function analyzeCloudSeaSample({
       timeScore,
       inversionDetected,
       inversionStrength,
+      inversionLayer,
+      cape: Number(cape || 0),
+      capePenalty: Number(capePenalty || 0),
     }),
   };
 }
@@ -284,29 +310,55 @@ function analyzeDayCloudSea(hourly, start, elevation, sunriseTimeFromAPI) {
   const precipitationProbabilities = (hourly.precipitation_probability ?? []).slice(start, start + 24).map((value) => Number(value ?? 0));
   const precipitationAmounts = (hourly.precipitation ?? []).slice(start, start + 24).map((value) => Number(value ?? 0));
   const timeSeries = hourly.time.slice(start, start + 24);
+  const temp925 = (hourly.temperature_925hPa ?? []).slice(start, start + 24);
+  const temp850 = (hourly.temperature_850hPa ?? []).slice(start, start + 24);
+  const temp700 = (hourly.temperature_700hPa ?? []).slice(start, start + 24);
+  const capeValues = (hourly.cape ?? []).slice(start, start + 24).map((value) => Number(value ?? 0));
   const sunriseTime = sunriseTimeFromAPI || timeSeries.find((timeString) => {
     const hour = new Date(timeString).getHours();
     return hour >= 5 && hour <= 7;
   }) || timeSeries[0];
-  const inversion = scoreInversion(temperatures);
-  const hourlyAnalyses = temperatures.map((temperature, index) => analyzeCloudSeaSample({
-    temperature,
-    humidity: humidities[index],
-    visibility: visibilities[index],
-    cloudCover: cloudCover[index],
-    lowCloudCover: lowCloudCover[index],
-    windSpeed: windSpeeds[index],
-    dewPoint: dewPoints[index],
-    pressureMsl: pressureMsl[index],
-    precipitationProbability: precipitationProbabilities[index],
-    precipitationAmount: precipitationAmounts[index],
-    elevation,
-    timeString: timeSeries[index],
-    sunriseTime,
-    inversionScore: inversion.score,
-    inversionDetected: inversion.detected,
-    inversionStrength: inversion.strength,
-  }));
+  const timeSeriesInversion = scoreInversion(temperatures);
+  const hourlyAnalyses = temperatures.map((temperature, index) => {
+    const verticalInversion = scoreVerticalInversion({
+      surfaceTemperature: temperature,
+      temperature925hPa: temp925[index],
+      temperature850hPa: temp850[index],
+      temperature700hPa: temp700[index],
+      elevation,
+    });
+    // Prefer the stronger of (a) pressure-level inversion or (b) legacy
+    // time-series fallback so we keep working when upper-air data is missing.
+    const useVertical = verticalInversion.detected || verticalInversion.score > 0;
+    const inversionScore = useVertical ? verticalInversion.score : timeSeriesInversion.score;
+    const inversionDetected = useVertical ? verticalInversion.detected : timeSeriesInversion.detected;
+    const inversionStrength = useVertical ? verticalInversion.strength : timeSeriesInversion.strength;
+    const inversionLayer = useVertical ? verticalInversion.layer : null;
+    const capeAtHour = Number(capeValues[index] || 0);
+    const capePenalty = scoreCapeStability(capeAtHour);
+
+    return analyzeCloudSeaSample({
+      temperature,
+      humidity: humidities[index],
+      visibility: visibilities[index],
+      cloudCover: cloudCover[index],
+      lowCloudCover: lowCloudCover[index],
+      windSpeed: windSpeeds[index],
+      dewPoint: dewPoints[index],
+      pressureMsl: pressureMsl[index],
+      precipitationProbability: precipitationProbabilities[index],
+      precipitationAmount: precipitationAmounts[index],
+      elevation,
+      timeString: timeSeries[index],
+      sunriseTime,
+      inversionScore,
+      inversionDetected,
+      inversionStrength,
+      inversionLayer,
+      cape: capeAtHour,
+      capePenalty,
+    });
+  });
   const cloudBases = hourlyAnalyses.map((analysis) => analysis.cloudBase);
   const bestHour = hourlyAnalyses.reduce((best, current, index) => {
     if (!best || current.score > best.score) {
@@ -330,7 +382,8 @@ function analyzeDayCloudSea(hourly, start, elevation, sunriseTimeFromAPI) {
     precipitationProbabilities,
     precipitationAmounts,
     cloudBases,
-    inversion,
+    inversion: timeSeriesInversion,
+    verticalInversionAvailable: temp925.length > 0 || temp850.length > 0 || temp700.length > 0,
     hourlyAnalyses,
     bestHour,
     score: bestHour?.score ?? 0,

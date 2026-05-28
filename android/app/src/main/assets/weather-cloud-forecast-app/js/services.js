@@ -103,6 +103,7 @@
   CS.services = {
     fetchWeather: services.fetchWeather,
     fetchElevation: services.fetchElevation,
+    fetchAirQuality: services.fetchAirQuality,
     geocodeAddress: services.geocodeAddress,
     reverseGeocode: services.reverseGeocode,
     getLocation: services.getLocation,

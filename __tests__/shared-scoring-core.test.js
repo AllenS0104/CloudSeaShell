@@ -49,4 +49,70 @@ describe('评分核心边界', () => {
     expect(scoring.compositeReliabilityPenalty({ humidity: 90, windSpeed: 12, cloudCover: 80, lowCloudCover: 10, inversionDetected: false, dewPointGap: 1, precipitationProbability: 70 })).toBe(18);
     expect(scoring.compositeReliabilityPenalty({ humidity: 50, windSpeed: 2, cloudCover: 20, lowCloudCover: 10, inversionDetected: true, dewPointGap: 5, precipitationProbability: 0 })).toBe(0);
   });
+
+  test('scoreVerticalInversion 使用 pressure-level 检测真实暖盖', () => {
+    // Strong inversion at 850 hPa: surface 5°C, 850 hPa 10°C → 5°C gap → max score
+    const strong = scoring.scoreVerticalInversion({
+      surfaceTemperature: 5,
+      temperature925hPa: 7,
+      temperature850hPa: 10,
+      temperature700hPa: 8,
+      elevation: 200,
+    });
+    expect(strong.detected).toBe(true);
+    expect(strong.score).toBe(12);
+    expect(strong.layer).toBe('850hPa');
+
+    // Moderate inversion at 925 hPa: 1.5°C gap
+    const moderate = scoring.scoreVerticalInversion({
+      surfaceTemperature: 6,
+      temperature925hPa: 7.5,
+      temperature850hPa: 5,
+      temperature700hPa: 3,
+      elevation: 100,
+    });
+    expect(moderate.detected).toBe(true);
+    expect(moderate.score).toBeGreaterThan(4);
+    expect(moderate.score).toBeLessThan(12);
+
+    // No inversion: upper levels colder
+    expect(scoring.scoreVerticalInversion({
+      surfaceTemperature: 15,
+      temperature925hPa: 10,
+      temperature850hPa: 5,
+      temperature700hPa: -2,
+      elevation: 200,
+    })).toMatchObject({ detected: false, score: 0 });
+
+    // Observation point ABOVE 925 hPa — that level should be skipped
+    const highElev = scoring.scoreVerticalInversion({
+      surfaceTemperature: 2,
+      temperature925hPa: 5,
+      temperature850hPa: -1,
+      temperature700hPa: -5,
+      elevation: 1200,
+    });
+    expect(highElev.layer).not.toBe('925hPa');
+    expect(highElev.detected).toBe(false);
+
+    // Missing all upper-air values → graceful zero
+    expect(scoring.scoreVerticalInversion({ surfaceTemperature: 10, elevation: 100 }))
+      .toMatchObject({ detected: false, score: 0, layer: null });
+
+    // Missing surface — cannot evaluate
+    expect(scoring.scoreVerticalInversion({ temperature925hPa: 5 }))
+      .toMatchObject({ detected: false, score: 0 });
+  });
+
+  test('scoreCapeStability 仅在显著对流时扣分', () => {
+    expect(scoring.scoreCapeStability(0)).toBe(0);
+    expect(scoring.scoreCapeStability(50)).toBe(0);
+    expect(scoring.scoreCapeStability(200)).toBeGreaterThan(0);
+    expect(scoring.scoreCapeStability(200)).toBeLessThanOrEqual(2);
+    expect(scoring.scoreCapeStability(500)).toBeGreaterThanOrEqual(3);
+    expect(scoring.scoreCapeStability(1000)).toBeGreaterThanOrEqual(7);
+    expect(scoring.scoreCapeStability(2000)).toBe(12);
+    expect(scoring.scoreCapeStability(null)).toBe(0);
+    expect(scoring.scoreCapeStability('abc')).toBe(0);
+  });
 });

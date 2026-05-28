@@ -119,7 +119,7 @@
             `latitude=${lat}`,
             `longitude=${lon}`,
             'current=temperature_2m,apparent_temperature,relative_humidity_2m,dew_point_2m,pressure_msl,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,visibility,wind_speed_10m,wind_direction_10m,precipitation,weather_code,is_day',
-            'hourly=temperature_2m,apparent_temperature,relative_humidity_2m,dew_point_2m,pressure_msl,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,precipitation,visibility,precipitation_probability,wind_speed_10m,weather_code,cape,is_day',
+            'hourly=temperature_2m,apparent_temperature,relative_humidity_2m,dew_point_2m,pressure_msl,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,precipitation,visibility,precipitation_probability,wind_speed_10m,weather_code,cape,is_day,temperature_925hPa,temperature_850hPa,temperature_700hPa',
             'daily=sunrise,sunset',
             'timezone=Asia/Shanghai',
           ].join('&');
@@ -171,6 +171,42 @@
       }
 
       return 300;
+    }
+
+    /**
+     * Fetch Open-Meteo air-quality data (PM2.5 + aerosol optical depth).
+     * Used by the sunset glow scorer for the Mie-scattering aerosol bonus
+     * documented in 云海和晚霞的形成.md (粉紫/丁香紫 dazzle requires
+     * suspended particulate matter of the right size).
+     *
+     * Returns { pm2_5, aerosolOpticalDepth, hourly, time } or null on failure.
+     */
+    async function fetchAirQuality(lat, lon) {
+      const safeLat = Number(lat);
+      const safeLon = Number(lon);
+      if (!Number.isFinite(safeLat) || !Number.isFinite(safeLon)) return null;
+      const cacheKey = `airq_${safeLat.toFixed(2)}_${safeLon.toFixed(2)}`;
+      const cached = getCachedData(cacheKey);
+      if (cached) return cached;
+
+      try {
+        const url = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${safeLat}&longitude=${safeLon}&hourly=pm2_5,pm10,aerosol_optical_depth,dust&timezone=Asia/Shanghai`;
+        const data = await requestJson(url, { timeoutMs: 8000, retries: 0 });
+        if (!data || !data.hourly || !Array.isArray(data.hourly.time)) return null;
+        const result = {
+          hourly: data.hourly,
+          time: data.hourly.time,
+          pm2_5: data.hourly.pm2_5 || [],
+          pm10: data.hourly.pm10 || [],
+          aerosolOpticalDepth: data.hourly.aerosol_optical_depth || [],
+          dust: data.hourly.dust || [],
+          source: 'open-meteo',
+        };
+        setCachedData(cacheKey, result, 30 * 60 * 1000);
+        return result;
+      } catch (err) {
+        return null;
+      }
     }
 
     function getContextHint(raw) {
@@ -620,6 +656,7 @@
     return {
       fetchWeather,
       fetchElevation,
+      fetchAirQuality,
       geocodeAddress,
       reverseGeocode,
       getLocation,

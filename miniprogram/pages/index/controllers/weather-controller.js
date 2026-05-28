@@ -36,6 +36,7 @@ function createWeatherController(deps) {
 
       setState({ isFav: favorites.isFavorite(lat, lon) });
 
+      fetchAirQualityAndRefresh(lat, lon);
       fetchFusion(lat, lon);
     } catch (err) {
       setState({
@@ -47,13 +48,27 @@ function createWeatherController(deps) {
     }
   }
 
+  async function fetchAirQualityAndRefresh(lat, lon) {
+    if (!api || typeof api.fetchAirQuality !== 'function') return;
+    try {
+      const airQuality = await api.fetchAirQuality(lat, lon);
+      if (!airQuality) return;
+      const state = getState();
+      if (state.lat !== lat || state.lon !== lon) return;
+      setState({ airQuality });
+      renderWeather();
+    } catch (err) {
+      /* swallow, non-blocking */
+    }
+  }
+
   function retry() {
     const state = getState();
     fetchAll(state.lat, state.lon);
   }
 
   function renderWeather() {
-    const { weatherData, elevation, selectedDayIndex, lat } = getState();
+    const { weatherData, elevation, selectedDayIndex, lat, airQuality } = getState();
     if (!weatherData) return;
 
     const hourly = weatherData.hourly;
@@ -64,7 +79,7 @@ function createWeatherController(deps) {
     const timeString = current?.time || hourly.time[start];
     const photoParams = analyzer.buildPhotoParams(timeString, sunrise, sunset, analysis, elevation);
 
-    const glowAnalysis = analyzer.analyzeGlow(hourly, start, sunrise, sunset);
+    const glowAnalysis = analyzer.analyzeGlow(hourly, start, sunrise, sunset, airQuality);
 
     const safetyAlerts = analyzer.buildSafetyAlerts(hourly, start, current, elevation);
 

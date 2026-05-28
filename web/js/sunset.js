@@ -132,6 +132,53 @@ function precipPenalty(precipProb, precipAmt) {
 }
 
 /**
+ * Aerosol bonus / penalty for sunset glow.
+ *
+ * Per 云海和晚霞的形成.md, the dreamy pink / lilac / purple tones come
+ * from Mie scattering off aerosols (火山灰、海盐、细颗粒污染物) of the
+ * right size. Light pollution-free clean air is OK, but a touch of
+ * aerosol typically produces the most striking colors. Heavy haze on the
+ * other hand obscures the sky.
+ *
+ * Inputs (any may be null):
+ *   pm2_5: μg/m³ (Open-Meteo air-quality)
+ *   aerosolOpticalDepth: 0..several (Open-Meteo)
+ *   dust: μg/m³
+ *
+ * Returns +bonus / -penalty in the range -8 .. +10.
+ */
+function scoreAerosolForGlow({ pm2_5, aerosolOpticalDepth, dust }) {
+  const aod = Number(aerosolOpticalDepth);
+  const pm = Number(pm2_5);
+  const dustVal = Number(dust);
+
+  // Heavy dust storms obscure rather than colorize
+  if (Number.isFinite(dustVal) && dustVal >= 200) return -8;
+
+  // Prefer AOD when available (most direct measure of column aerosol load)
+  if (Number.isFinite(aod) && aod > 0) {
+    if (aod >= 0.8) return -8;             // heavy haze, obscured sky
+    if (aod >= 0.5) return Math.round(lerp(aod, 0.5, 0.8, 2, -8));
+    if (aod >= 0.2) return 10;             // sweet spot for pink/purple
+    if (aod >= 0.1) return Math.round(lerp(aod, 0.1, 0.2, 4, 10));
+    if (aod >= 0.05) return Math.round(lerp(aod, 0.05, 0.1, 0, 4));
+    return -2;                             // ultra-clean air — no Mie tint
+  }
+
+  // Fallback to PM2.5 if AOD missing
+  if (Number.isFinite(pm) && pm > 0) {
+    if (pm >= 200) return -8;
+    if (pm >= 150) return Math.round(lerp(pm, 150, 200, 2, -8));
+    if (pm >= 30 && pm <= 80) return 8;
+    if (pm >= 10 && pm < 30) return Math.round(lerp(pm, 10, 30, 2, 8));
+    if (pm > 80 && pm < 150) return Math.round(lerp(pm, 80, 150, 8, 2));
+    return -2;                             // very clean
+  }
+
+  return 0;
+}
+
+/**
  * Analyze sunset glow potential for a single time sample
  */
 function analyzeGlowSample({
@@ -145,6 +192,7 @@ function analyzeGlowSample({
   timeString,
   sunriseTime,
   sunsetTime,
+  aerosol,
 }) {
   const midScore = scoreMidCloud(cloudCoverMid);
   const highScore = scoreHighCloud(cloudCoverHigh);
@@ -156,8 +204,9 @@ function analyzeGlowSample({
   const timeScore = Math.max(sunsetScore, sunriseScore);
   const isEvening = sunsetScore >= sunriseScore;
   const penalty = precipPenalty(precipitationProbability, precipitationAmount);
+  const aerosolScore = aerosol ? scoreAerosolForGlow(aerosol) : 0;
 
-  const rawScore = midScore + highScore + humidityScore + visScore + timeScore - lowPenalty - penalty;
+  const rawScore = midScore + highScore + humidityScore + visScore + timeScore + aerosolScore - lowPenalty - penalty;
   const score = clamp(rawScore, 0, 100);
 
   let level, label;
@@ -170,6 +219,7 @@ function analyzeGlowSample({
     cloudCoverMid, cloudCoverHigh, cloudCoverLow,
     humidity, visibility, timeScore, isEvening,
     precipitationProbability, precipitationAmount,
+    aerosol, aerosolScore,
   });
 
   return {
@@ -184,6 +234,7 @@ function analyzeGlowSample({
     humidityScore,
     visScore,
     timeScore,
+    aerosolScore,
     penalty,
     reasons,
     resultText: score >= 50 ? `${label}（${score} 分）` : `${label}（${score} 分）`,
@@ -193,7 +244,7 @@ function analyzeGlowSample({
   };
 }
 
-function buildGlowReasons({ cloudCoverMid, cloudCoverHigh, cloudCoverLow, humidity, visibility, timeScore, isEvening, precipitationProbability, precipitationAmount }) {
+function buildGlowReasons({ cloudCoverMid, cloudCoverHigh, cloudCoverLow, humidity, visibility, timeScore, isEvening, precipitationProbability, precipitationAmount, aerosol, aerosolScore }) {
   const reasons = [];
   const midV = Number(cloudCoverMid ?? 0);
   const highV = Number(cloudCoverHigh ?? 0);
@@ -209,6 +260,18 @@ function buildGlowReasons({ cloudCoverMid, cloudCoverHigh, cloudCoverLow, humidi
 
   if (highV >= 20 && highV <= 60) {
     reasons.push(`高层云量 ${Math.round(highV)}%，有利于呈现粉紫色调。`);
+  }
+
+  if (aerosol && aerosolScore > 4) {
+    const aod = Number(aerosol.aerosolOpticalDepth);
+    const pm = Number(aerosol.pm2_5);
+    if (Number.isFinite(aod) && aod > 0) {
+      reasons.push(`气溶胶光学厚度 ${aod.toFixed(2)}，米氏散射有助形成粉紫色调。`);
+    } else if (Number.isFinite(pm) && pm > 0) {
+      reasons.push(`PM2.5 约 ${Math.round(pm)} μg/m³，颗粒物正好有助渲染粉紫色霞光。`);
+    }
+  } else if (aerosol && aerosolScore <= -4) {
+    reasons.push('空气浑浊度偏高，可能遮蔽霞光透射。');
   }
 
   if (lowV >= 50) {
@@ -229,13 +292,13 @@ function buildGlowReasons({ cloudCoverMid, cloudCoverHigh, cloudCoverLow, humidi
     reasons.push('有降水信号，可能影响霞光可见性。');
   }
 
-  return reasons.slice(0, 4);
+  return reasons.slice(0, 5);
 }
 
 /**
  * Analyze glow potential for a full day (find best hour)
  */
-function analyzeDayGlow(hourly, start, sunriseTime, sunsetTime) {
+function analyzeDayGlow(hourly, start, sunriseTime, sunsetTime, airQuality) {
   const times = hourly.time.slice(start, start + 24);
   const midCovers = (hourly.cloud_cover_mid ?? []).slice(start, start + 24).map(v => Number(v ?? 0));
   const highCovers = (hourly.cloud_cover_high ?? []).slice(start, start + 24).map(v => Number(v ?? 0));
@@ -244,6 +307,8 @@ function analyzeDayGlow(hourly, start, sunriseTime, sunsetTime) {
   const visibilities = (hourly.visibility ?? []).slice(start, start + 24).map(v => Number(v ?? 0));
   const precipProbs = (hourly.precipitation_probability ?? []).slice(start, start + 24).map(v => Number(v ?? 0));
   const precipAmts = (hourly.precipitation ?? []).slice(start, start + 24).map(v => Number(v ?? 0));
+
+  const aerosolSeries = buildAerosolSeries(times, airQuality);
 
   const hourlyAnalyses = times.map((t, i) => analyzeGlowSample({
     cloudCoverMid: midCovers[i],
@@ -256,6 +321,7 @@ function analyzeDayGlow(hourly, start, sunriseTime, sunsetTime) {
     timeString: t,
     sunriseTime,
     sunsetTime,
+    aerosol: aerosolSeries[i],
   }));
 
   // Find best glow hour
@@ -286,7 +352,36 @@ function analyzeDayGlow(hourly, start, sunriseTime, sunsetTime) {
   };
 }
 
+/**
+ * Align hourly air-quality samples (different time index than weather)
+ * with the weather timeline by matching the YYYY-MM-DDTHH prefix.
+ * Returns an array of aerosol payloads (or null) per weather hour.
+ */
+function buildAerosolSeries(weatherTimes, airQuality) {
+  if (!airQuality || !Array.isArray(airQuality.time)) {
+    return weatherTimes.map(() => null);
+  }
+  const indexByPrefix = new Map();
+  airQuality.time.forEach((t, idx) => {
+    const prefix = String(t || '').slice(0, 13);
+    if (prefix && !indexByPrefix.has(prefix)) indexByPrefix.set(prefix, idx);
+  });
+
+  return weatherTimes.map((t) => {
+    const prefix = String(t || '').slice(0, 13);
+    const idx = indexByPrefix.get(prefix);
+    if (idx == null) return null;
+    return {
+      pm2_5: Number(airQuality.pm2_5?.[idx] ?? NaN),
+      pm10: Number(airQuality.pm10?.[idx] ?? NaN),
+      aerosolOpticalDepth: Number(airQuality.aerosolOpticalDepth?.[idx] ?? NaN),
+      dust: Number(airQuality.dust?.[idx] ?? NaN),
+    };
+  });
+}
+
 module.exports = {
   analyzeGlowSample,
   analyzeDayGlow,
+  scoreAerosolForGlow,
 };

@@ -31,4 +31,33 @@ describe('晚霞核心分析', () => {
     const hourly = { time: [], cloud_cover_mid: [], cloud_cover_high: [], cloud_cover_low: [], relative_humidity_2m: [], visibility: [], precipitation_probability: [], precipitation: [] };
     expect(sunset.analyzeDayGlow(hourly, 0).score).toBe(0);
   });
+
+  test('scoreAerosolForGlow 区分干净空气、最佳气溶胶、重度雾霾', () => {
+    // Sweet spot for Mie scattering
+    expect(sunset.scoreAerosolForGlow({ aerosolOpticalDepth: 0.3 })).toBe(10);
+    expect(sunset.scoreAerosolForGlow({ pm2_5: 50 })).toBe(8);
+    // Very clean air — small penalty (no Mie tint)
+    expect(sunset.scoreAerosolForGlow({ aerosolOpticalDepth: 0.02 })).toBe(-2);
+    // Heavy haze / dust storm — large penalty
+    expect(sunset.scoreAerosolForGlow({ aerosolOpticalDepth: 1.0 })).toBe(-8);
+    expect(sunset.scoreAerosolForGlow({ dust: 250 })).toBe(-8);
+    expect(sunset.scoreAerosolForGlow({ pm2_5: 220 })).toBe(-8);
+    // No data
+    expect(sunset.scoreAerosolForGlow({})).toBe(0);
+  });
+
+  test('analyzeDayGlow 接受 airQuality 并提升火烧云评分', () => {
+    const hourly = makeHourly();
+    const baseline = sunset.analyzeDayGlow(hourly, 0, '2026-06-01T05:00:00+08:00', '2026-06-01T18:00:00+08:00');
+    const airQuality = {
+      time: hourly.time,
+      pm2_5: hourly.time.map(() => 45),
+      pm10: hourly.time.map(() => 60),
+      aerosolOpticalDepth: hourly.time.map(() => 0.3),
+      dust: hourly.time.map(() => 0),
+    };
+    const enhanced = sunset.analyzeDayGlow(hourly, 0, '2026-06-01T05:00:00+08:00', '2026-06-01T18:00:00+08:00', airQuality);
+    expect(enhanced.bestHour.score).toBeGreaterThan(baseline.bestHour.score);
+    expect(enhanced.bestHour.reasons.join('')).toMatch(/气溶胶|PM2\.5/);
+  });
 });

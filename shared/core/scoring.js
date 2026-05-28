@@ -106,6 +106,85 @@ function scoreInversion(temperatures) {
 }
 
 /**
+ * Vertical inversion detection using pressure-level temperatures.
+ *
+ * The cloud-sea physics (per 云海和晚霞的形成.md) requires an absolute
+ * stable layering where a WARM dry layer sits ABOVE cold moist air —
+ * "下重上轻" sealing convection. This is best detected by comparing
+ * surface/2m temperature against 925/850/700 hPa pressure-level
+ * temperatures (corresponding to roughly 800m / 1.5km / 3km altitude).
+ *
+ * Returns { score 0-12, detected, strength, layer } so the cloud-sea
+ * scorer can use it instead of (or in addition to) the legacy
+ * `scoreInversion` time-series proxy.
+ */
+function scoreVerticalInversion({
+  surfaceTemperature,
+  temperature925hPa,
+  temperature850hPa,
+  temperature700hPa,
+  elevation,
+}) {
+  const tSurface = Number(surfaceTemperature);
+  if (!Number.isFinite(tSurface)) {
+    return { score: 0, detected: false, strength: 0, layer: null };
+  }
+
+  // Skip levels that are physically below the observation point.
+  // 925 hPa ≈ 800 m, 850 hPa ≈ 1500 m, 700 hPa ≈ 3000 m.
+  const elev = Number(elevation) || 0;
+  const candidates = [];
+  if (Number.isFinite(Number(temperature925hPa)) && elev < 800) {
+    candidates.push({ level: '925hPa', temperature: Number(temperature925hPa) });
+  }
+  if (Number.isFinite(Number(temperature850hPa)) && elev < 1500) {
+    candidates.push({ level: '850hPa', temperature: Number(temperature850hPa) });
+  }
+  if (Number.isFinite(Number(temperature700hPa)) && elev < 3000) {
+    candidates.push({ level: '700hPa', temperature: Number(temperature700hPa) });
+  }
+  if (!candidates.length) {
+    return { score: 0, detected: false, strength: 0, layer: null };
+  }
+
+  let best = { strength: -Infinity, level: null };
+  for (const candidate of candidates) {
+    const strength = candidate.temperature - tSurface;
+    if (strength > best.strength) {
+      best = { strength, level: candidate.level };
+    }
+  }
+  const strength = best.strength;
+  const layer = best.level;
+
+  // Strong inversion: upper level ≥ surface + 3°C → cap solidly in place
+  if (strength >= 3) return { score: 12, detected: true, strength, layer };
+  // Moderate inversion: surface ≤ upper level ≤ surface + 3°C
+  if (strength >= 0.5) return { score: Math.round(lerp(strength, 0.5, 3, 4, 12)), detected: true, strength, layer };
+  // No inversion or weak — no bonus
+  return { score: 0, detected: false, strength, layer };
+}
+
+/**
+ * CAPE-based stability penalty for cloud-sea predictions.
+ *
+ * Per the physics doc, cloud sea forms under "绝对稳定的封锁" (absolute
+ * stable layering). High CAPE (Convective Available Potential Energy)
+ * indicates the opposite — the atmosphere wants to convect, which
+ * destroys any inversion-trapped fog layer.
+ *
+ * Returns a penalty 0-12 to subtract from the cloud-sea score.
+ */
+function scoreCapeStability(cape) {
+  const v = Number(cape ?? 0);
+  if (!Number.isFinite(v) || v <= 100) return 0;
+  if (v >= 1500) return 12;
+  if (v >= 800) return Math.round(lerp(v, 800, 1500, 6, 12));
+  if (v >= 300) return Math.round(lerp(v, 300, 800, 2, 6));
+  return Math.round(lerp(v, 100, 300, 0, 2));
+}
+
+/**
  * Composite false-positive penalty
  *
  * Analysis of 17 FP cases shows they share a pattern:
@@ -190,6 +269,8 @@ module.exports = {
   precipitationPenalty,
   scoreTimeWindow,
   scoreInversion,
+  scoreVerticalInversion,
+  scoreCapeStability,
   scoreToConfidence,
   compositeReliabilityPenalty,
 };

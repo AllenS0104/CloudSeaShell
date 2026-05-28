@@ -69,8 +69,8 @@ function analyzeWeather(weatherData, elevation, selectedDayIndex) {
   };
 }
 
-function analyzeGlow(hourly, start, sunrise, sunset) {
-  const result = sunsetModule.analyzeDayGlow(hourly, start, sunrise, sunset);
+function analyzeGlow(hourly, start, sunrise, sunset, airQuality) {
+  const result = sunsetModule.analyzeDayGlow(hourly, start, sunrise, sunset, airQuality);
   return {
     score: result.score,
     level: result.level,

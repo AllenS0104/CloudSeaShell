@@ -326,6 +326,9 @@
         showStatus('天气数据已更新', 'success');
       }
 
+      // Fire-and-forget air-quality fetch — re-render glow when ready
+      fetchAirQualityAndRefresh(lat, lon);
+
       renderWeather();
 
       // Update fav state
@@ -383,7 +386,7 @@
     var photoParams = analyzer.buildPhotoParams(timeString, sunrise, sunset, analysis, elevation);
 
     // Sunset glow
-    var glowAnalysis = analyzer.analyzeGlow(hourly, start, sunrise, sunset);
+    var glowAnalysis = analyzer.analyzeGlow(hourly, start, sunrise, sunset, state.airQuality);
 
     // Safety
     var safetyAlerts = analyzer.buildSafetyAlerts(hourly, start, current, elevation);
@@ -722,6 +725,23 @@
     }
     state.fusionLoading = false;
     hide('fusion-loading');
+  }
+
+  // Fetch Open-Meteo air-quality (PM2.5 / AOD) for sunset glow aerosol scoring.
+  // Non-blocking — re-render glow when the data arrives.
+  async function fetchAirQualityAndRefresh(lat, lon) {
+    if (!api || typeof api.fetchAirQuality !== 'function') return;
+    try {
+      var airQuality = await api.fetchAirQuality(lat, lon);
+      if (!airQuality) return;
+      if (state.lat !== lat || state.lon !== lon) return;
+      state.airQuality = airQuality;
+      if (state.weatherData) {
+        renderWeather();
+      }
+    } catch (err) {
+      console.warn('空气质量获取失败:', err && err.message);
+    }
   }
 
   function renderFusion(result) {
