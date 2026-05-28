@@ -9,6 +9,23 @@ function createSearchController(deps) {
   const { getState, setState, services } = deps;
   const { api, searchHistory } = services;
 
+  function enrichLocationName(lat, lon) {
+    if (!api || typeof api.reverseGeocode !== 'function') return Promise.resolve(null);
+    return api.reverseGeocode(lat, lon).then((place) => {
+      if (!place || !place.display) return null;
+      const state = getState();
+      if (state.lat !== lat || state.lon !== lon) return place;
+      const coords = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+      const currentName = state.locationName || '';
+      const alreadyHasPlace = /\(.+\)$/.test(currentName);
+      if (alreadyHasPlace && currentName.indexOf(place.display) >= 0) return place;
+      const baseName = /^坐标 /.test(currentName) ? `坐标 ${coords}` : currentName;
+      const nextName = `${baseName} (${place.display})`;
+      setState({ locationName: nextName, locationPlace: place });
+      return place;
+    }).catch(() => null);
+  }
+
   async function autoLocate() {
     try {
       const pos = await api.getLocation();
@@ -17,6 +34,7 @@ function createSearchController(deps) {
         lon: pos.longitude,
         locationName: '当前位置',
       });
+      enrichLocationName(pos.latitude, pos.longitude);
       services.fetchAll(pos.latitude, pos.longitude);
     } catch (err) {
       console.warn('自动定位失败，使用默认位置', err.message);
@@ -43,7 +61,7 @@ function createSearchController(deps) {
         setState({ loading: false, statusText: '未找到匹配地点', statusType: 'warning' });
       } else if (results.length === 1) {
         const r = results[0];
-        setState({ lat: r.latitude, lon: r.longitude, locationName: r.name });
+        setState({ lat: r.latitude, lon: r.longitude, locationName: r.name, locationPlace: null });
         searchHistory.addSearchHistory({ name: r.name, lat: r.latitude, lon: r.longitude });
         setState({ searchHistoryList: searchHistory.getSearchHistory() });
         await services.fetchAll(r.latitude, r.longitude);
@@ -54,7 +72,7 @@ function createSearchController(deps) {
           itemList: names,
           success(res) {
             const picked = visibleResults[res.tapIndex];
-            setState({ lat: picked.latitude, lon: picked.longitude, locationName: picked.name });
+            setState({ lat: picked.latitude, lon: picked.longitude, locationName: picked.name, locationPlace: null });
             searchHistory.addSearchHistory({ name: picked.name, lat: picked.latitude, lon: picked.longitude });
             setState({ searchHistoryList: searchHistory.getSearchHistory() });
             services.fetchAll(picked.latitude, picked.longitude);
@@ -79,6 +97,7 @@ function createSearchController(deps) {
         lon: pos.longitude,
         locationName: '当前位置',
       });
+      enrichLocationName(pos.latitude, pos.longitude);
       await services.fetchAll(pos.latitude, pos.longitude);
     } catch (err) {
       setState({ statusText: `定位失败：${err.message}`, statusType: 'warning' });
@@ -93,8 +112,10 @@ function createSearchController(deps) {
       setState({
         lat,
         lon,
-        locationName: `${lat.toFixed(2)}, ${lon.toFixed(2)}`,
+        locationName: `坐标 ${lat.toFixed(4)}, ${lon.toFixed(4)}`,
+        locationPlace: null,
       });
+      enrichLocationName(lat, lon);
       services.fetchAll(lat, lon);
     }
   }
@@ -102,7 +123,7 @@ function createSearchController(deps) {
   function handleHistoryTap(e) {
     const item = e.currentTarget.dataset.item;
     if (!item) return;
-    setState({ lat: item.lat, lon: item.lon, locationName: item.name });
+    setState({ lat: item.lat, lon: item.lon, locationName: item.name, locationPlace: null });
     services.fetchAll(item.lat, item.lon);
   }
 
@@ -113,6 +134,7 @@ function createSearchController(deps) {
     handleLocate,
     handleMapTap,
     handleHistoryTap,
+    enrichLocationName,
   };
 }
 

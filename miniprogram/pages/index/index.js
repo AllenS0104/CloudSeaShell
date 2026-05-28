@@ -133,10 +133,9 @@ Page({
   },
 
   onShareAppMessage() {
-    const { analysis, locationName } = this.data;
-    const score = analysis?.score ?? 0;
+    const controllers = getControllers(this);
     return {
-      title: `${locationName} 云海预测：${score} 分`,
+      title: controllers.share.buildShareTitle(this.data),
       path: '/pages/index/index',
     };
   },
