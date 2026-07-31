@@ -52,11 +52,27 @@
       '简洁地图 (英文)': carto,
     };
 
+    var isTouch = ('ontouchstart' in global) || (global.navigator && global.navigator.maxTouchPoints > 0);
+
     mapInstance = L.map('map', {
       layers: [gaode],
       zoomControl: true,
       attributionControl: true,
+      // On touch devices Leaflet's own CSS sets `touch-action: none` on the
+      // container whenever dragging + touchZoom are both active. That makes
+      // the map swallow every vertical swipe, so the page (and screen
+      // recordings) get stuck at the map and you cannot scroll past it.
+      // Leaflet adds/removes `leaflet-touch-drag` in the drag handler's
+      // addHooks/removeHooks, so toggling dragging also toggles touch-action:
+      // off => `pan-x pan-y` (page scrolls), on => `none` (map pans).
+      // Dragging is therefore turned on only for two-finger gestures.
+      dragging: !isTouch,
+      // A bare wheel should scroll the page; Ctrl/⌘ + wheel zooms the map.
+      scrollWheelZoom: false,
     }).setView([lat, lon], zoom);
+
+    if (isTouch) enableTwoFingerPan(mapInstance);
+    enableCtrlWheelZoom(mapInstance);
 
     L.control.layers(baseLayers, null, { position: 'topright', collapsed: true }).addTo(mapInstance);
 
@@ -80,6 +96,54 @@
     scheduleInvalidateSize();
 
     return mapInstance;
+  }
+
+  /**
+   * Pan the map only while two fingers are down. A single finger keeps its
+   * default behaviour (scrolling the page), which is what makes the rest of
+   * the report reachable on a phone.
+   */
+  function enableTwoFingerPan(map) {
+    var container = map.getContainer();
+    if (!container) return;
+
+    map.dragging.disable();
+
+    container.addEventListener('touchstart', function(e) {
+      if (e.touches && e.touches.length >= 2) {
+        map.dragging.enable();
+        setHint('twoFinger');
+      }
+    }, { passive: true });
+
+    var release = function(e) {
+      if (!e.touches || e.touches.length < 2) map.dragging.disable();
+    };
+    container.addEventListener('touchend', release, { passive: true });
+    container.addEventListener('touchcancel', release, { passive: true });
+  }
+
+  /** Ctrl/⌘ + wheel zooms; a bare wheel is left alone so the page scrolls. */
+  function enableCtrlWheelZoom(map) {
+    var container = map.getContainer();
+    if (!container) return;
+
+    container.addEventListener('wheel', function(e) {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      var delta = e.deltaY < 0 ? 1 : -1;
+      map.setZoom(map.getZoom() + delta);
+    }, { passive: false });
+  }
+
+  /** Swap the hint text once the user has discovered the gesture. */
+  function setHint(state) {
+    var el = global.document && global.document.getElementById('map-hint');
+    if (!el) return;
+    if (state === 'twoFinger') {
+      el.textContent = '💡 点击地图任意位置可定位';
+      el.classList.add('fade');
+    }
   }
 
   function setLocation(lat, lon, opts) {

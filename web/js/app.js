@@ -630,7 +630,16 @@
     if (!star) { setHTML('star-stats', ''); return; }
     var items = [];
     if (star.score != null) items.push({ icon: '🌌', label: '银河指数', value: star.score + ' 分' });
-    if (star.moonPhase != null) items.push({ icon: '🌙', label: '月相', value: star.moonPhaseLabel || star.moonPhase });
+    // scoreStargazing returns moonPhase as an object ({ icon, name }), so
+    // rendering it directly would print "[object Object]".
+    if (star.moonPhase != null) {
+      var moon = star.moonPhase;
+      var moonText = typeof moon === 'string'
+        ? moon
+        : [moon.icon, moon.name].filter(Boolean).join(' ');
+      if (star.moonIllum != null) moonText += ' · 亮度 ' + star.moonIllum + '%';
+      if (moonText) items.push({ icon: '🌙', label: '月相', value: moonText });
+    }
     if (star.lightPollution != null) items.push({ icon: '💡', label: '光污染', value: star.lightPollution });
     if (state.lightPollution && state.lightPollution.label) {
       items.push({ icon: '🌃', label: '机位光污染', value: state.lightPollution.label + (state.lightPollution.bortleClass ? ' · Bortle ' + state.lightPollution.bortleClass : '') });
@@ -749,19 +758,30 @@
     show('fusion-section');
     hide('fusion-loading');
 
-    setText('fusion-result', result.label || (result.score + ' 分'));
+    // CS.fusion returns fusedScore/resultText/agreement/stdDev/modelDetails.
+    // Reading score/label/confidence/spread/models here rendered
+    // "undefined 分" and an empty model list. Keep the old names as
+    // fallbacks in case another caller passes the flatter shape.
+    var score = result.fusedScore != null ? result.fusedScore : result.score;
+    var label = result.resultText || result.label;
+    var agreementLabel = (result.agreement && result.agreement.label) || result.confidence;
+    var spread = result.stdDev != null ? result.stdDev : result.spread;
+    var models = result.modelDetails || result.models;
+
+    setText('fusion-result', label || (score != null ? score + ' 分' : '--'));
     setText('fusion-summary', result.summary || '');
 
     // Stats
     var statsItems = [];
-    if (result.score != null) statsItems.push({ icon: '📊', label: '融合评分', value: result.score + ' 分' });
-    if (result.confidence) statsItems.push({ icon: '🎯', label: '一致性', value: result.confidence });
-    if (result.spread != null) statsItems.push({ icon: '📏', label: '分散度', value: result.spread.toFixed(1) });
+    if (score != null) statsItems.push({ icon: '📊', label: '融合评分', value: score + ' 分' });
+    if (agreementLabel) statsItems.push({ icon: '🎯', label: '一致性', value: agreementLabel });
+    if (spread != null) statsItems.push({ icon: '📏', label: '分散度', value: Number(spread).toFixed(1) });
+    if (result.modelCount != null) statsItems.push({ icon: '🧮', label: '参与模式', value: result.modelCount + ' 个' });
     setHTML('fusion-stats', renderStatCards(statsItems));
 
     // Model details
-    if (result.models && result.models.length) {
-      var html = result.models.map(function(m) {
+    if (models && models.length) {
+      var html = models.map(function(m) {
         return '<div class="fusion-model-row">'
           + '<span class="fusion-model-name">' + esc(m.name) + '</span>'
           + '<span class="fusion-model-score">' + (m.score != null ? m.score + ' 分' : '--') + '</span>'
@@ -773,7 +793,7 @@
     if (result.disclaimer) setText('fusion-disclaimer', result.disclaimer);
 
     // Collapsed summary
-    setText('fusion-collapsed', result.label || '');
+    setText('fusion-collapsed', label || '');
 
     if (state.showFusion) {
       show('fusion-detail');
