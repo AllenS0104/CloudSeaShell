@@ -575,23 +575,118 @@
       const cached = getCachedData(cacheKey);
       if (cached) return cached;
 
+      // Try fine-grained providers first; BigDataCloud is admin-only and
+      // saved for last because it only returns district/city level.
       const providers = [
-        () => reverseGeocodeBigDataCloud(latitude, longitude),
+        () => reverseGeocodePhoton(latitude, longitude),
         () => reverseGeocodeNominatim(latitude, longitude),
+        () => reverseGeocodeBigDataCloud(latitude, longitude),
       ];
 
+      const candidates = [];
       for (const provider of providers) {
         try {
           const result = await provider();
-          if (result && result.display) {
-            setCachedData(cacheKey, result, 24 * 60 * 60 * 1000);
-            return result;
-          }
+          if (result && result.display) candidates.push(result);
         } catch (err) {
           /* try next provider */
         }
       }
-      return null;
+
+      // Always consider the offline waypoint dataset — even if online
+      // providers succeeded we may want to append "牛背山附近 1.2km" to a
+      // coarse district result.
+      const nearestWp = reverseGeocodeFromWaypoints(latitude, longitude);
+      let best = pickMostGranularReverseResult(candidates) || nearestWp;
+      if (!best) return null;
+
+      // Annotate with the very-close waypoint (≤5 km) if it's not already
+      // mentioned. Skip if the chosen result is itself the waypoint result.
+      if (nearestWp && nearestWp.distanceKm != null && nearestWp.distanceKm <= 5
+        && best.source !== 'waypoint-nearest'
+        && best.display.indexOf(nearestWp.primary) < 0) {
+        const wpSuffix = nearestWp.distanceKm <= 0.5
+          ? nearestWp.primary
+          : `${nearestWp.primary} 附近 ${nearestWp.distanceKm.toFixed(1)} km`;
+        best = {
+          ...best,
+          display: `${best.display} · ${wpSuffix}`,
+          nearestWaypoint: nearestWp,
+        };
+      }
+
+      setCachedData(cacheKey, best, 24 * 60 * 60 * 1000);
+      return best;
+    }
+
+    /**
+     * Rank reverse-geocode results so street/village/hamlet wins over
+     * district/city wins over province. Coarse admin-only results from
+     * BigDataCloud should never beat a street-level OSM result.
+     */
+    function pickMostGranularReverseResult(results) {
+      if (!Array.isArray(results) || !results.length) return null;
+      const scored = results.map((r) => ({ r, score: granularityScore(r) }));
+      scored.sort((a, b) => b.score - a.score);
+      return scored[0].r;
+    }
+
+    function granularityScore(result) {
+      if (!result) return -1;
+      const display = String(result.display || '');
+      const primary = String(result.primary || '');
+      let score = 0;
+      // Street / road / building level
+      if (/(街|路|巷|号|大道|大街|胡同|弄|街区)/.test(primary)) score += 60;
+      // Village / hamlet / community
+      else if (/(村|社区|屯|寨|坝|甸)/.test(primary)) score += 45;
+      // Town / township
+      else if (/(镇|乡|街道|办事处)/.test(primary)) score += 30;
+      // Tourist attraction / mountain / scenic
+      else if (/(山|峰|岭|寺|庙|公园|景区|湖|水库|沟|谷|岛|垭口|观景台)/.test(primary)) score += 35;
+      // District / county
+      else if (/(区|县|旗)/.test(primary)) score += 15;
+      // City / municipality
+      else if (/(市|地区|州|盟)/.test(primary)) score += 5;
+      // Province
+      else if (/(省|自治区|特别行政区)/.test(primary)) score += 2;
+
+      // Prefer providers known to give finer detail
+      if (result.source === 'photon') score += 4;
+      else if (result.source === 'nominatim') score += 3;
+      else if (result.source === 'waypoint-nearest') score += 6;
+      else if (result.source === 'bigdatacloud') score += 1;
+
+      // Longer composite names usually carry more context
+      score += Math.min(8, Math.floor(display.length / 4));
+      return score;
+    }
+
+    async function reverseGeocodePhoton(latitude, longitude) {
+      const data = await requestJson(
+        `https://photon.komoot.io/reverse?lat=${latitude}&lon=${longitude}&lang=zh&limit=1`,
+        { timeoutMs: 7000, retries: 0 }
+      );
+      const feature = data && Array.isArray(data.features) ? data.features[0] : null;
+      if (!feature) return null;
+      const props = feature.properties || {};
+      const parts = uniqueAddressParts([
+        props.name,
+        props.street,
+        props.suburb || props.district || props.locality,
+        props.city || props.county,
+        props.state,
+        props.country,
+      ]);
+      const display = parts.join(' ');
+      if (!display) return null;
+      return {
+        display,
+        primary: parts[0] || display,
+        parts,
+        country: props.country || '',
+        source: 'photon',
+      };
     }
 
     async function reverseGeocodeBigDataCloud(latitude, longitude) {
@@ -619,11 +714,13 @@
 
     async function reverseGeocodeNominatim(latitude, longitude) {
       const data = await requestJson(
-        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&zoom=14&accept-language=zh-CN`,
+        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&zoom=17&accept-language=zh-CN`,
         { timeoutMs: 8000, retries: 0, header: { Accept: 'application/json' } }
       );
       const address = (data && data.address) || {};
       const parts = uniqueAddressParts([
+        address.road || address.pedestrian || address.path,
+        address.house_number,
         address.village || address.hamlet || address.town || address.suburb || address.neighbourhood || address.locality,
         address.tourism || address.attraction || address.natural || address.peak,
         address.county || address.city_district || address.city || address.municipality,
@@ -638,6 +735,82 @@
         country: address.country || '',
         source: 'nominatim',
       };
+    }
+
+    /**
+     * Offline fallback: pick the nearest bundled waypoint within ~80 km.
+     * Works without network — useful when the online providers are blocked
+     * (e.g. Nominatim from inside mainland China without VPN, or fully
+     * offline). Returns the same shape as the online providers.
+     */
+    function reverseGeocodeFromWaypoints(latitude, longitude) {
+      const waypoints = loadWaypointDataset();
+      if (!waypoints.length) return null;
+
+      let best = null;
+      for (const wp of waypoints) {
+        if (!wp || !wp.name) continue;
+        const wpLat = Number(wp.lat);
+        const wpLng = Number(wp.lng);
+        if (!Number.isFinite(wpLat) || !Number.isFinite(wpLng)) continue;
+        const distanceKm = haversineKm(latitude, longitude, wpLat, wpLng);
+        if (!best || distanceKm < best.distanceKm) {
+          best = { wp, distanceKm };
+        }
+      }
+
+      if (!best || best.distanceKm > 80) return null;
+
+      const distanceLabel = best.distanceKm < 1
+        ? `${Math.round(best.distanceKm * 1000)} m`
+        : `${best.distanceKm < 10 ? best.distanceKm.toFixed(1) : Math.round(best.distanceKm)} km`;
+      const display = best.distanceKm <= 0.5
+        ? best.wp.name
+        : `${best.wp.name} 附近（约 ${distanceLabel}）`;
+
+      return {
+        display,
+        primary: best.wp.name,
+        parts: [best.wp.name],
+        country: '中国',
+        distanceKm: Math.round(best.distanceKm * 10) / 10,
+        source: 'waypoint-nearest',
+      };
+    }
+
+    function loadWaypointDataset() {
+      try {
+        if (typeof require === 'function') {
+          try {
+            const mod = require('./waypoints-data');
+            if (mod && Array.isArray(mod.WAYPOINTS) && mod.WAYPOINTS.length) {
+              return mod.WAYPOINTS;
+            }
+          } catch (e) { /* fallthrough to globals */ }
+        }
+        if (typeof globalThis !== 'undefined') {
+          const g = globalThis;
+          if (g.CloudSeaCore && g.CloudSeaCore.waypoints && Array.isArray(g.CloudSeaCore.waypoints.WAYPOINTS)) {
+            return g.CloudSeaCore.waypoints.WAYPOINTS;
+          }
+          if (g.CloudSea && g.CloudSea.waypoints && Array.isArray(g.CloudSea.waypoints.WAYPOINTS)) {
+            return g.CloudSea.waypoints.WAYPOINTS;
+          }
+        }
+      } catch (e) { /* ignore */ }
+      return [];
+    }
+
+    function haversineKm(aLat, aLng, bLat, bLng) {
+      const toRad = (v) => v * Math.PI / 180;
+      const earthRadiusKm = 6371;
+      const dLat = toRad(bLat - aLat);
+      const dLng = toRad(bLng - aLng);
+      const lat1 = toRad(aLat);
+      const lat2 = toRad(bLat);
+      const h = Math.sin(dLat / 2) ** 2
+        + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+      return 2 * earthRadiusKm * Math.asin(Math.min(1, Math.sqrt(h)));
     }
 
     function uniqueAddressParts(parts) {

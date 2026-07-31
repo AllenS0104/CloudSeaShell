@@ -4,6 +4,8 @@ module.exports = {
   ignorePatterns: [
     'android/app/build/**',
     'miniprogram/**',
+    // Third-party bundles are shipped as-is and must not be linted.
+    '**/vendor/**',
   ],
   overrides: [
     {
@@ -49,6 +51,8 @@ module.exports = {
       globals: {
         CustomEvent: 'readonly',
         Notification: 'readonly',
+        Buffer: 'readonly',
+        OffscreenCanvas: 'readonly',
       },
     },
     {

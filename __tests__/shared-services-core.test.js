@@ -96,6 +96,77 @@ describe('服务核心端口适配', () => {
     expect(results[0]).toMatchObject({ primaryName: '他窖村', latitude: 39.8123, longitude: 115.7234 });
   });
 
+  test('reverseGeocode 在所有线上源失败时回退到最近机位', async () => {
+    const http = { request: jest.fn().mockRejectedValue(new Error('network down')) };
+    const services = createServices({ http });
+    // 牛背山位置约 (29.8039, 102.4449)，构造一个 ~12km 偏移的点
+    const place = await services.reverseGeocode(29.9, 102.45);
+    expect(place).toBeTruthy();
+    expect(place.source).toBe('waypoint-nearest');
+    expect(place.display).toMatch(/牛背山/);
+    expect(place.distanceKm).toBeGreaterThan(0);
+    expect(place.distanceKm).toBeLessThan(20);
+  });
+
+  test('reverseGeocode 在精确命中机位时直接返回名称', async () => {
+    const http = { request: jest.fn().mockRejectedValue(new Error('network down')) };
+    const services = createServices({ http });
+    const place = await services.reverseGeocode(29.8039, 102.4449);
+    expect(place.display).toBe('牛背山');
+    expect(place.source).toBe('waypoint-nearest');
+  });
+
+  test('reverseGeocode 在线上源成功时优先返回线上结果', async () => {
+    const http = { request: jest.fn(({ url }) => {
+      if (url.includes('bigdatacloud.net')) {
+        return Promise.resolve({ statusCode: 200, data: { locality: '海淀区', city: '北京市', countryName: '中国' } });
+      }
+      return Promise.resolve({ statusCode: 200, data: {} });
+    }) };
+    const services = createServices({ http });
+    const place = await services.reverseGeocode(39.9, 116.4);
+    expect(place.source).toBe('bigdatacloud');
+    expect(place.display).toMatch(/海淀区/);
+  });
+
+  test('reverseGeocode 在所有源均无结果时返回 null', async () => {
+    const http = { request: jest.fn().mockRejectedValue(new Error('network down')) };
+    const services = createServices({ http });
+    // 太平洋中部，距离任何机位都很远
+    const place = await services.reverseGeocode(0, -150);
+    expect(place).toBeNull();
+  });
+
+  test('reverseGeocode 偏好街道/村镇级别而非行政区粗结果', async () => {
+    // 同时返回 BigDataCloud (区级粗) 和 Photon (村级细)，应优先选 Photon。
+    const http = { request: jest.fn(({ url }) => {
+      if (url.includes('bigdatacloud.net')) {
+        return Promise.resolve({ statusCode: 200, data: { locality: '', city: '大兴区', principalSubdivision: '北京市', countryName: '中国' } });
+      }
+      if (url.includes('photon.komoot.io')) {
+        return Promise.resolve({ statusCode: 200, data: { features: [{ properties: { name: '黄村镇', suburb: '兴政街', city: '大兴区', state: '北京市', country: '中国' } }] } });
+      }
+      return Promise.resolve({ statusCode: 200, data: {} });
+    }) };
+    const place = await createServices({ http }).reverseGeocode(39.7745, 116.2518);
+    expect(place.source).toBe('photon');
+    expect(place.display).toMatch(/黄村镇/);
+  });
+
+  test('reverseGeocode 在 5km 内有机位时把机位名追加到行政区结果', async () => {
+    const http = { request: jest.fn(({ url }) => {
+      if (url.includes('bigdatacloud.net')) {
+        return Promise.resolve({ statusCode: 200, data: { locality: '', city: '雅安市', principalSubdivision: '四川省', countryName: '中国' } });
+      }
+      return Promise.resolve({ statusCode: 200, data: {} });
+    }) };
+    // 距离牛背山 (29.8039, 102.4449) 约 2km
+    const place = await createServices({ http }).reverseGeocode(29.82, 102.445);
+    expect(place.display).toMatch(/雅安市/);
+    expect(place.display).toMatch(/牛背山/);
+    expect(place.nearestWaypoint).toBeTruthy();
+  });
+
   test('getLocation 使用注入端口，缺失时抛出配置错误', async () => {
     await expect(createServices({ getLocation: () => Promise.resolve({ lat: 1 }) }).getLocation()).resolves.toEqual({ lat: 1 });
     await expect(createServices({}).getLocation()).rejects.toThrow('定位端口未配置');

@@ -14,7 +14,12 @@
     "build:rn-tokens": "node scripts/build-rn-tokens.js",
     "verify:assets": "node scripts/verify-assets.js",
     "sync:shared": "node scripts/sync-shared.js",
-    "validate:waypoints": "node scripts/validate-waypoints.js"
+    "sync:android": "node scripts/sync-android-assets.js",
+    "verify:android-assets": "node scripts/sync-android-assets.js --check",
+    "validate:waypoints": "node scripts/validate-waypoints.js",
+    "ingest:xhs": "node scripts/fetch-xhs-notes.js",
+    "backtest:glow": "node miniprogram/utils/tests/glow-backtest.js",
+    "backtest:cloudsea": "node miniprogram/utils/tests/backtest.js"
   },
   "dependencies": {
     "react": "19.1.0",

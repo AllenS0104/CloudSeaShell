@@ -29,6 +29,17 @@ jobs:
       - name: Validate waypoints
         run: npm run validate:waypoints
 
+      - name: Verify shared core is synced to all platforms
+        run: |
+          npm run sync:shared
+          npm run sync:android
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "❌ Generated/synced files are out of date. Run 'npm run sync:shared && npm run sync:android' and commit the result."
+            git --no-pager diff --stat
+            exit 1
+          fi
+          echo "✅ shared/ and Android assets are in sync."
+
       - name: Run unit tests
         run: npx jest __tests__/ --verbose
 

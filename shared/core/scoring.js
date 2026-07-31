@@ -127,7 +127,7 @@ function scoreVerticalInversion({
 }) {
   const tSurface = Number(surfaceTemperature);
   if (!Number.isFinite(tSurface)) {
-    return { score: 0, detected: false, strength: 0, layer: null };
+    return { score: 0, detected: false, strength: 0, layer: null, available: false };
   }
 
   // Skip levels that are physically below the observation point.
@@ -144,7 +144,7 @@ function scoreVerticalInversion({
     candidates.push({ level: '700hPa', temperature: Number(temperature700hPa) });
   }
   if (!candidates.length) {
-    return { score: 0, detected: false, strength: 0, layer: null };
+    return { score: 0, detected: false, strength: 0, layer: null, available: false };
   }
 
   let best = { strength: -Infinity, level: null };
@@ -158,11 +158,11 @@ function scoreVerticalInversion({
   const layer = best.level;
 
   // Strong inversion: upper level ≥ surface + 3°C → cap solidly in place
-  if (strength >= 3) return { score: 12, detected: true, strength, layer };
+  if (strength >= 3) return { score: 12, detected: true, strength, layer, available: true };
   // Moderate inversion: surface ≤ upper level ≤ surface + 3°C
-  if (strength >= 0.5) return { score: Math.round(lerp(strength, 0.5, 3, 4, 12)), detected: true, strength, layer };
+  if (strength >= 0.5) return { score: Math.round(lerp(strength, 0.5, 3, 4, 12)), detected: true, strength, layer, available: true };
   // No inversion or weak — no bonus
-  return { score: 0, detected: false, strength, layer };
+  return { score: 0, detected: false, strength, layer, available: true };
 }
 
 /**

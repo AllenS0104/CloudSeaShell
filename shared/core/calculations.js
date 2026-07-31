@@ -292,9 +292,44 @@ function maxOrZero(values) {
   return values.length ? Math.max(...values) : 0;
 }
 
+/**
+ * Cheap content fingerprint of the 24 h window actually used for scoring.
+ * Cache correctness depends on this: two different weather payloads must
+ * never collide, otherwise callers such as the multi-model fusion silently
+ * reuse another model's result.
+ */
+function fingerprintHourly(hourly, start) {
+  if (!hourly) return 'none';
+  const fields = [
+    'temperature_2m', 'relative_humidity_2m', 'dew_point_2m', 'pressure_msl',
+    'visibility', 'cloud_cover', 'cloud_cover_low', 'wind_speed_10m',
+    'precipitation', 'precipitation_probability', 'cape',
+    'temperature_925hPa', 'temperature_850hPa', 'temperature_700hPa',
+  ];
+  /* eslint-disable no-bitwise */
+  let hash = 0x811c9dc5;
+  const mix = (value) => {
+    const n = Number.isFinite(Number(value)) ? Math.round(Number(value) * 100) : -999999;
+    hash ^= n;
+    hash = Math.imul(hash, 0x01000193);
+  };
+  mix(hourly.time?.[start] ? String(hourly.time[start]).length : 0);
+  for (const field of fields) {
+    const series = hourly[field];
+    if (!Array.isArray(series)) { mix(-1); continue; }
+    for (let i = start; i < start + 24; i += 1) mix(series[i]);
+  }
+  return (hash >>> 0).toString(36);
+  /* eslint-enable no-bitwise */
+}
+
 function analyzeDayCloudSea(hourly, start, elevation, sunriseTimeFromAPI) {
-  // Cache key based on start index + elevation + sunrise
-  const cacheKey = `${start}_${elevation}_${sunriseTimeFromAPI || ''}`;
+  // Cache key must fingerprint the actual weather payload, not just the
+  // slice parameters. Keying on start/elevation/sunrise alone made every
+  // caller with matching parameters share one result — which silently
+  // reduced multi-model fusion (ICON/GFS/JMA/ECMWF) to a single model and
+  // returned stale scores after a forecast refresh.
+  const cacheKey = `${start}_${elevation}_${sunriseTimeFromAPI || ''}_${fingerprintHourly(hourly, start)}`;
   if (_dayAnalysisCache.has(cacheKey)) {
     return _dayAnalysisCache.get(cacheKey);
   }
@@ -327,9 +362,12 @@ function analyzeDayCloudSea(hourly, start, elevation, sunriseTimeFromAPI) {
       temperature700hPa: temp700[index],
       elevation,
     });
-    // Prefer the stronger of (a) pressure-level inversion or (b) legacy
-    // time-series fallback so we keep working when upper-air data is missing.
-    const useVertical = verticalInversion.detected || verticalInversion.score > 0;
+    // Use the pressure-level (real vertical profile) result whenever upper-air
+    // data exists — including when it reports "no inversion". Falling back to
+    // the surface time-series proxy in that case caused ~96% of days to be
+    // flagged as having an inversion (ground truth: ~10%), because rising
+    // daytime surface temperature looks identical to an inversion to that proxy.
+    const useVertical = verticalInversion.available;
     const inversionScore = useVertical ? verticalInversion.score : timeSeriesInversion.score;
     const inversionDetected = useVertical ? verticalInversion.detected : timeSeriesInversion.detected;
     const inversionStrength = useVertical ? verticalInversion.strength : timeSeriesInversion.strength;
@@ -440,6 +478,7 @@ module.exports = Object.assign({
   getCurrentLowCloudCover,
   getHourlyCloudCover,
   getHourlyLowCloudCover,
+  fingerprintHourly,
   minOrZero,
   maxOrZero,
   windDirection,

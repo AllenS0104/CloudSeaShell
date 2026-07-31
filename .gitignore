@@ -85,3 +85,6 @@ web/dist/
 *.apk
 build-apk.log
 
+
+# Backtest weather cache (regenerable from Open-Meteo)
+.glow-backtest-cache.json
