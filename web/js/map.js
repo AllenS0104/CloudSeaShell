@@ -58,20 +58,29 @@
       layers: [gaode],
       zoomControl: true,
       attributionControl: true,
-      // On touch devices Leaflet's own CSS sets `touch-action: none` on the
-      // container whenever dragging + touchZoom are both active. That makes
-      // the map swallow every vertical swipe, so the page (and screen
-      // recordings) get stuck at the map and you cannot scroll past it.
-      // Leaflet adds/removes `leaflet-touch-drag` in the drag handler's
-      // addHooks/removeHooks, so toggling dragging also toggles touch-action:
-      // off => `pan-x pan-y` (page scrolls), on => `none` (map pans).
-      // Dragging is therefore turned on only for two-finger gestures.
+      // Leaflet's own CSS drives touch-action from the enabled handlers:
+      //   dragging + touchZoom -> `none`      (map eats every swipe)
+      //   touchZoom only       -> `pan-x pan-y` (browser scrolls the page)
+      // With dragging on, a 52vh map swallowed every vertical swipe and the
+      // page — and screen recordings — got stuck at the map.
+      //
+      // Turning dragging off on touch devices does NOT cost map panning:
+      // Leaflet's TouchZoom handler already pans as well as zooms (it moves
+      // the map by the delta of the two-finger midpoint even when the pinch
+      // ratio is exactly 1), and it binds on the very touchstart that puts
+      // the second finger down, so two-finger panning is immediate.
+      //
+      // Do not "help" this by toggling dragging on when a second finger
+      // lands: touch-action is latched when a gesture starts, so it cannot
+      // affect the gesture in flight, and a missed touchend would leave
+      // dragging on — bringing the original scroll-trap bug straight back.
       dragging: !isTouch,
+      touchZoom: true,
       // A bare wheel should scroll the page; Ctrl/⌘ + wheel zooms the map.
       scrollWheelZoom: false,
     }).setView([lat, lon], zoom);
 
-    if (isTouch) enableTwoFingerPan(mapInstance);
+    if (isTouch) hintOnTwoFinger(mapInstance);
     enableCtrlWheelZoom(mapInstance);
 
     L.control.layers(baseLayers, null, { position: 'topright', collapsed: true }).addTo(mapInstance);
@@ -99,28 +108,17 @@
   }
 
   /**
-   * Pan the map only while two fingers are down. A single finger keeps its
-   * default behaviour (scrolling the page), which is what makes the rest of
-   * the report reachable on a phone.
+   * Swap the map hint once the user has found the two-finger gesture.
+   * Purely cosmetic — it must never touch the handlers, or it would
+   * reintroduce the scroll trap.
    */
-  function enableTwoFingerPan(map) {
+  function hintOnTwoFinger(map) {
     var container = map.getContainer();
     if (!container) return;
 
-    map.dragging.disable();
-
     container.addEventListener('touchstart', function(e) {
-      if (e.touches && e.touches.length >= 2) {
-        map.dragging.enable();
-        setHint('twoFinger');
-      }
+      if (e.touches && e.touches.length >= 2) setHint('twoFinger');
     }, { passive: true });
-
-    var release = function(e) {
-      if (!e.touches || e.touches.length < 2) map.dragging.disable();
-    };
-    container.addEventListener('touchend', release, { passive: true });
-    container.addEventListener('touchcancel', release, { passive: true });
   }
 
   /** Ctrl/⌘ + wheel zooms; a bare wheel is left alone so the page scrolls. */
