@@ -15,6 +15,7 @@
     "verify:assets": "node scripts/verify-assets.js",
     "sync:shared": "node scripts/sync-shared.js",
     "sync:android": "node scripts/sync-android-assets.js",
+    "verify:bundle": "node web/build.js --check",
     "verify:android-assets": "node scripts/sync-android-assets.js --check",
     "validate:waypoints": "node scripts/validate-waypoints.js",
     "ingest:xhs": "node scripts/fetch-xhs-notes.js",

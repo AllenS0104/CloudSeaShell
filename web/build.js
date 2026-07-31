@@ -1,7 +1,14 @@
 /**
  * Simple bundler: concatenates algorithm files with require() shim
  * Run: node web/build.js
+ *      node web/build.js --check   # verify bundle.js is up to date (CI)
  * Output: web/js/bundle.js and web/dist/build-info.json
+ *
+ * bundle.js is what index.html actually loads (the individual js/scoring.js,
+ * js/calculations.js ... files are NOT script-tagged), so a stale bundle
+ * silently ships old algorithms to both the web app and the APK. The bundle
+ * is therefore byte-deterministic — no timestamp inside — so `--check` can
+ * detect staleness. Build time lives in build-info.json instead.
  */
 const fs = require('fs');
 const path = require('path');
@@ -33,8 +40,8 @@ const order = [
   'poster-layout',
 ];
 
-let output = `// Auto-generated bundle — do not edit
-// Built: ${new Date().toISOString()}
+let output = `// Auto-generated bundle — do not edit. Run: npm run build:web
+// Deterministic output: build time is recorded in dist/build-info.json.
 (function(global) {
 'use strict';
 const _cache = {};
@@ -50,8 +57,10 @@ function require(name) {
 for (const name of order) {
   const file = path.join(__dirname, 'js', name + '.js');
   if (!fs.existsSync(file)) {
-    console.warn('⚠️  Skipping missing file:', file);
-    continue;
+    // Silently skipping would drop a whole feature (云海 / 晚霞 / 星空 /
+    // 摄影参数) from the web app and the APK with only a warning in the log.
+    console.error(`❌ Missing bundle module: web/js/${name}.js`);
+    process.exit(1);
   }
   const src = fs.readFileSync(file, 'utf8');
   output += `// === ${name} ===\n`;
@@ -80,7 +89,21 @@ global.CloudSea.posterLayout = _cache['poster-layout'];
 })(window);
 `;
 
-fs.writeFileSync(path.join(__dirname, 'js', 'bundle.js'), output, 'utf8');
+const bundlePath = path.join(__dirname, 'js', 'bundle.js');
+
+if (process.argv.includes('--check')) {
+  const current = fs.existsSync(bundlePath) ? fs.readFileSync(bundlePath, 'utf8') : null;
+  if (current !== output) {
+    console.error('❌ web/js/bundle.js is stale — index.html loads the bundle, '
+      + 'so algorithm edits are NOT live until it is rebuilt.');
+    console.error('   Run: npm run build:web && npm run sync:android');
+    process.exit(1);
+  }
+  console.log('✅ web/js/bundle.js is up to date');
+  process.exit(0);
+}
+
+fs.writeFileSync(bundlePath, output, 'utf8');
 console.log('✅ Bundle created: web/js/bundle.js (' + (output.length / 1024).toFixed(1) + ' KB)');
 
 function getCommitSha() {

@@ -1,5 +1,5 @@
-// Auto-generated bundle — do not edit
-// Built: 2026-05-22T06:27:05.801Z
+// Auto-generated bundle — do not edit. Run: npm run build:web
+// Deterministic output: build time is recorded in dist/build-info.json.
 (function(global) {
 'use strict';
 const _cache = {};
@@ -237,6 +237,7 @@ module.exports = { t, setLocale, getLocale, getSupportedLocales };
   var module = { exports: {} };
   var exports = module.exports;
 // 由 shared/core 同步；请勿直接编辑。运行 npm run sync:shared 更新。
+/* SHARED CORE — single source of truth, do not edit per-end copies */
 const { clamp, lerp } = require('./math-utils');
 
 function scoreHumidity(humidity) {
@@ -344,6 +345,85 @@ function scoreInversion(temperatures) {
 }
 
 /**
+ * Vertical inversion detection using pressure-level temperatures.
+ *
+ * The cloud-sea physics (per 云海和晚霞的形成.md) requires an absolute
+ * stable layering where a WARM dry layer sits ABOVE cold moist air —
+ * "下重上轻" sealing convection. This is best detected by comparing
+ * surface/2m temperature against 925/850/700 hPa pressure-level
+ * temperatures (corresponding to roughly 800m / 1.5km / 3km altitude).
+ *
+ * Returns { score 0-12, detected, strength, layer } so the cloud-sea
+ * scorer can use it instead of (or in addition to) the legacy
+ * `scoreInversion` time-series proxy.
+ */
+function scoreVerticalInversion({
+  surfaceTemperature,
+  temperature925hPa,
+  temperature850hPa,
+  temperature700hPa,
+  elevation,
+}) {
+  const tSurface = Number(surfaceTemperature);
+  if (!Number.isFinite(tSurface)) {
+    return { score: 0, detected: false, strength: 0, layer: null, available: false };
+  }
+
+  // Skip levels that are physically below the observation point.
+  // 925 hPa ≈ 800 m, 850 hPa ≈ 1500 m, 700 hPa ≈ 3000 m.
+  const elev = Number(elevation) || 0;
+  const candidates = [];
+  if (Number.isFinite(Number(temperature925hPa)) && elev < 800) {
+    candidates.push({ level: '925hPa', temperature: Number(temperature925hPa) });
+  }
+  if (Number.isFinite(Number(temperature850hPa)) && elev < 1500) {
+    candidates.push({ level: '850hPa', temperature: Number(temperature850hPa) });
+  }
+  if (Number.isFinite(Number(temperature700hPa)) && elev < 3000) {
+    candidates.push({ level: '700hPa', temperature: Number(temperature700hPa) });
+  }
+  if (!candidates.length) {
+    return { score: 0, detected: false, strength: 0, layer: null, available: false };
+  }
+
+  let best = { strength: -Infinity, level: null };
+  for (const candidate of candidates) {
+    const strength = candidate.temperature - tSurface;
+    if (strength > best.strength) {
+      best = { strength, level: candidate.level };
+    }
+  }
+  const strength = best.strength;
+  const layer = best.level;
+
+  // Strong inversion: upper level ≥ surface + 3°C → cap solidly in place
+  if (strength >= 3) return { score: 12, detected: true, strength, layer, available: true };
+  // Moderate inversion: surface ≤ upper level ≤ surface + 3°C
+  if (strength >= 0.5) return { score: Math.round(lerp(strength, 0.5, 3, 4, 12)), detected: true, strength, layer, available: true };
+  // No inversion or weak — no bonus
+  return { score: 0, detected: false, strength, layer, available: true };
+}
+
+/**
+ * CAPE-based stability penalty for cloud-sea predictions.
+ *
+ * Per the physics doc, cloud sea forms under "绝对稳定的封锁" (absolute
+ * stable layering). High CAPE (Convective Available Potential Energy)
+ * indicates the opposite — the atmosphere wants to convect, which
+ * destroys any inversion-trapped fog layer.
+ *
+ * Returns a penalty 0-12 to subtract from the cloud-sea score.
+ */
+function scoreCapeStability(cape) {
+  const v = Number(cape ?? 0);
+  if (!Number.isFinite(v) || v <= 100) return 0;
+  if (v >= 1500) return 12;
+  if (v >= 800) return Math.round(lerp(v, 800, 1500, 6, 12));
+  if (v >= 300) return Math.round(lerp(v, 300, 800, 2, 6));
+  return Math.round(lerp(v, 100, 300, 0, 2));
+}
+
+/**
  * Composite false-positive penalty
  *
  * Analysis of 17 FP cases shows they share a pattern:
@@ -428,6 +508,8 @@ module.exports = {
   precipitationPenalty,
   scoreTimeWindow,
   scoreInversion,
+  scoreVerticalInversion,
+  scoreCapeStability,
   scoreToConfidence,
   compositeReliabilityPenalty,
 };
@@ -564,6 +646,7 @@ module.exports = {
   var module = { exports: {} };
   var exports = module.exports;
 // 由 shared/core 同步；请勿直接编辑。运行 npm run sync:shared 更新。
+/* SHARED CORE — single source of truth, do not edit per-end copies */
 // Background images not used in Mini Program (bundled locally if needed)
 const DAY_BACKGROUND = '';
 const NIGHT_BACKGROUND = '';
@@ -584,6 +667,8 @@ const {
   precipitationPenalty,
   scoreTimeWindow,
   scoreInversion,
+  scoreVerticalInversion,
+  scoreCapeStability,
   scoreToConfidence,
   compositeReliabilityPenalty,
 } = scoring;
@@ -625,11 +710,22 @@ function buildReasons({
   timeScore,
   inversionDetected,
   inversionStrength,
+  inversionLayer,
+  cape,
+  capePenalty,
 }) {
   const reasons = [];
 
   if (inversionDetected) {
-    reasons.push(`检测到逆温层（温差 ${inversionStrength.toFixed(1)}°C），有利于低云/雾层稳定维持。`);
+    if (inversionLayer) {
+      reasons.push(`检测到逆温层（${inversionLayer} 比地面高 ${inversionStrength.toFixed(1)}°C），暖盖压制对流，有利低云/雾层稳定堆叠。`);
+    } else {
+      reasons.push(`检测到逆温层（温差 ${inversionStrength.toFixed(1)}°C），有利于低云/雾层稳定维持。`);
+    }
+  }
+
+  if (Number(capePenalty) >= 3) {
+    reasons.push(`对流潜势偏强（CAPE ${Math.round(cape)} J/kg），层结不稳定不利于稳定云海形成。`);
   }
 
   if (gapToElevation >= 50) {
@@ -700,6 +796,9 @@ function analyzeCloudSeaSample({
   inversionScore = 0,
   inversionDetected = false,
   inversionStrength = 0,
+  inversionLayer = null,
+  capePenalty = 0,
+  cape = 0,
 }) {
   const safeTemperature = Number(temperature ?? 0);
   const safeHumidity = Number(humidity ?? 0);
@@ -742,7 +841,7 @@ function analyzeCloudSeaSample({
     dewPointGap,
     precipitationProbability: safePrecipitationProbability,
   });
-  const score = clamp(baseScore - penalty - compositePenalty, 0, 100);
+  const score = clamp(baseScore - penalty - compositePenalty - Number(capePenalty || 0), 0, 100);
   const confidence = scoreToConfidence(score);
   const suggestion = score >= 55;
 
@@ -760,8 +859,15 @@ function analyzeCloudSeaSample({
     precipitationAmount: safePrecipitationAmount,
     gapToElevation,
     timeScore,
+    inversionScore,
+    inversionDetected,
+    inversionStrength,
+    inversionLayer,
+    cape: Number(cape || 0),
+    capePenalty: Number(capePenalty || 0),
     baseScore,
     penalty,
+    compositePenalty,
     score,
     confidenceLabel: confidence.label,
     confidenceLevel: confidence.level,
@@ -784,6 +890,9 @@ function analyzeCloudSeaSample({
       timeScore,
       inversionDetected,
       inversionStrength,
+      inversionLayer,
+      cape: Number(cape || 0),
+      capePenalty: Number(capePenalty || 0),
     }),
   };
 }
@@ -831,9 +940,44 @@ function maxOrZero(values) {
   return values.length ? Math.max(...values) : 0;
 }
 
+/**
+ * Cheap content fingerprint of the 24 h window actually used for scoring.
+ * Cache correctness depends on this: two different weather payloads must
+ * never collide, otherwise callers such as the multi-model fusion silently
+ * reuse another model's result.
+ */
+function fingerprintHourly(hourly, start) {
+  if (!hourly) return 'none';
+  const fields = [
+    'temperature_2m', 'relative_humidity_2m', 'dew_point_2m', 'pressure_msl',
+    'visibility', 'cloud_cover', 'cloud_cover_low', 'wind_speed_10m',
+    'precipitation', 'precipitation_probability', 'cape',
+    'temperature_925hPa', 'temperature_850hPa', 'temperature_700hPa',
+  ];
+  /* eslint-disable no-bitwise */
+  let hash = 0x811c9dc5;
+  const mix = (value) => {
+    const n = Number.isFinite(Number(value)) ? Math.round(Number(value) * 100) : -999999;
+    hash ^= n;
+    hash = Math.imul(hash, 0x01000193);
+  };
+  mix(hourly.time?.[start] ? String(hourly.time[start]).length : 0);
+  for (const field of fields) {
+    const series = hourly[field];
+    if (!Array.isArray(series)) { mix(-1); continue; }
+    for (let i = start; i < start + 24; i += 1) mix(series[i]);
+  }
+  return (hash >>> 0).toString(36);
+  /* eslint-enable no-bitwise */
+}
+
 function analyzeDayCloudSea(hourly, start, elevation, sunriseTimeFromAPI) {
-  // Cache key based on start index + elevation + sunrise
-  const cacheKey = `${start}_${elevation}_${sunriseTimeFromAPI || ''}`;
+  // Cache key must fingerprint the actual weather payload, not just the
+  // slice parameters. Keying on start/elevation/sunrise alone made every
+  // caller with matching parameters share one result — which silently
+  // reduced multi-model fusion (ICON/GFS/JMA/ECMWF) to a single model and
+  // returned stale scores after a forecast refresh.
+  const cacheKey = `${start}_${elevation}_${sunriseTimeFromAPI || ''}_${fingerprintHourly(hourly, start)}`;
   if (_dayAnalysisCache.has(cacheKey)) {
     return _dayAnalysisCache.get(cacheKey);
   }
@@ -849,29 +993,58 @@ function analyzeDayCloudSea(hourly, start, elevation, sunriseTimeFromAPI) {
   const precipitationProbabilities = (hourly.precipitation_probability ?? []).slice(start, start + 24).map((value) => Number(value ?? 0));
   const precipitationAmounts = (hourly.precipitation ?? []).slice(start, start + 24).map((value) => Number(value ?? 0));
   const timeSeries = hourly.time.slice(start, start + 24);
+  const temp925 = (hourly.temperature_925hPa ?? []).slice(start, start + 24);
+  const temp850 = (hourly.temperature_850hPa ?? []).slice(start, start + 24);
+  const temp700 = (hourly.temperature_700hPa ?? []).slice(start, start + 24);
+  const capeValues = (hourly.cape ?? []).slice(start, start + 24).map((value) => Number(value ?? 0));
   const sunriseTime = sunriseTimeFromAPI || timeSeries.find((timeString) => {
     const hour = new Date(timeString).getHours();
     return hour >= 5 && hour <= 7;
   }) || timeSeries[0];
-  const inversion = scoreInversion(temperatures);
-  const hourlyAnalyses = temperatures.map((temperature, index) => analyzeCloudSeaSample({
-    temperature,
-    humidity: humidities[index],
-    visibility: visibilities[index],
-    cloudCover: cloudCover[index],
-    lowCloudCover: lowCloudCover[index],
-    windSpeed: windSpeeds[index],
-    dewPoint: dewPoints[index],
-    pressureMsl: pressureMsl[index],
-    precipitationProbability: precipitationProbabilities[index],
-    precipitationAmount: precipitationAmounts[index],
-    elevation,
-    timeString: timeSeries[index],
-    sunriseTime,
-    inversionScore: inversion.score,
-    inversionDetected: inversion.detected,
-    inversionStrength: inversion.strength,
-  }));
+  const timeSeriesInversion = scoreInversion(temperatures);
+  const hourlyAnalyses = temperatures.map((temperature, index) => {
+    const verticalInversion = scoreVerticalInversion({
+      surfaceTemperature: temperature,
+      temperature925hPa: temp925[index],
+      temperature850hPa: temp850[index],
+      temperature700hPa: temp700[index],
+      elevation,
+    });
+    // Use the pressure-level (real vertical profile) result whenever upper-air
+    // data exists — including when it reports "no inversion". Falling back to
+    // the surface time-series proxy in that case caused ~96% of days to be
+    // flagged as having an inversion (ground truth: ~10%), because rising
+    // daytime surface temperature looks identical to an inversion to that proxy.
+    const useVertical = verticalInversion.available;
+    const inversionScore = useVertical ? verticalInversion.score : timeSeriesInversion.score;
+    const inversionDetected = useVertical ? verticalInversion.detected : timeSeriesInversion.detected;
+    const inversionStrength = useVertical ? verticalInversion.strength : timeSeriesInversion.strength;
+    const inversionLayer = useVertical ? verticalInversion.layer : null;
+    const capeAtHour = Number(capeValues[index] || 0);
+    const capePenalty = scoreCapeStability(capeAtHour);
+
+    return analyzeCloudSeaSample({
+      temperature,
+      humidity: humidities[index],
+      visibility: visibilities[index],
+      cloudCover: cloudCover[index],
+      lowCloudCover: lowCloudCover[index],
+      windSpeed: windSpeeds[index],
+      dewPoint: dewPoints[index],
+      pressureMsl: pressureMsl[index],
+      precipitationProbability: precipitationProbabilities[index],
+      precipitationAmount: precipitationAmounts[index],
+      elevation,
+      timeString: timeSeries[index],
+      sunriseTime,
+      inversionScore,
+      inversionDetected,
+      inversionStrength,
+      inversionLayer,
+      cape: capeAtHour,
+      capePenalty,
+    });
+  });
   const cloudBases = hourlyAnalyses.map((analysis) => analysis.cloudBase);
   const bestHour = hourlyAnalyses.reduce((best, current, index) => {
     if (!best || current.score > best.score) {
@@ -895,7 +1068,8 @@ function analyzeDayCloudSea(hourly, start, elevation, sunriseTimeFromAPI) {
     precipitationProbabilities,
     precipitationAmounts,
     cloudBases,
-    inversion,
+    inversion: timeSeriesInversion,
+    verticalInversionAvailable: temp925.length > 0 || temp850.length > 0 || temp700.length > 0,
     hourlyAnalyses,
     bestHour,
     score: bestHour?.score ?? 0,
@@ -952,6 +1126,7 @@ module.exports = Object.assign({
   getCurrentLowCloudCover,
   getHourlyCloudCover,
   getHourlyLowCloudCover,
+  fingerprintHourly,
   minOrZero,
   maxOrZero,
   windDirection,
@@ -1984,6 +2159,53 @@ function precipPenalty(precipProb, precipAmt) {
 }
 
 /**
+ * Aerosol bonus / penalty for sunset glow.
+ *
+ * Per 云海和晚霞的形成.md, the dreamy pink / lilac / purple tones come
+ * from Mie scattering off aerosols (火山灰、海盐、细颗粒污染物) of the
+ * right size. Light pollution-free clean air is OK, but a touch of
+ * aerosol typically produces the most striking colors. Heavy haze on the
+ * other hand obscures the sky.
+ *
+ * Inputs (any may be null):
+ *   pm2_5: μg/m³ (Open-Meteo air-quality)
+ *   aerosolOpticalDepth: 0..several (Open-Meteo)
+ *   dust: μg/m³
+ *
+ * Returns +bonus / -penalty in the range -8 .. +10.
+ */
+function scoreAerosolForGlow({ pm2_5, aerosolOpticalDepth, dust }) {
+  const aod = Number(aerosolOpticalDepth);
+  const pm = Number(pm2_5);
+  const dustVal = Number(dust);
+
+  // Heavy dust storms obscure rather than colorize
+  if (Number.isFinite(dustVal) && dustVal >= 200) return -8;
+
+  // Prefer AOD when available (most direct measure of column aerosol load)
+  if (Number.isFinite(aod) && aod > 0) {
+    if (aod >= 0.8) return -8;             // heavy haze, obscured sky
+    if (aod >= 0.5) return Math.round(lerp(aod, 0.5, 0.8, 2, -8));
+    if (aod >= 0.2) return 10;             // sweet spot for pink/purple
+    if (aod >= 0.1) return Math.round(lerp(aod, 0.1, 0.2, 4, 10));
+    if (aod >= 0.05) return Math.round(lerp(aod, 0.05, 0.1, 0, 4));
+    return -2;                             // ultra-clean air — no Mie tint
+  }
+
+  // Fallback to PM2.5 if AOD missing
+  if (Number.isFinite(pm) && pm > 0) {
+    if (pm >= 200) return -8;
+    if (pm >= 150) return Math.round(lerp(pm, 150, 200, 2, -8));
+    if (pm >= 30 && pm <= 80) return 8;
+    if (pm >= 10 && pm < 30) return Math.round(lerp(pm, 10, 30, 2, 8));
+    if (pm > 80 && pm < 150) return Math.round(lerp(pm, 80, 150, 8, 2));
+    return -2;                             // very clean
+  }
+
+  return 0;
+}
+
+/**
  * Analyze sunset glow potential for a single time sample
  */
 function analyzeGlowSample({
@@ -1997,6 +2219,7 @@ function analyzeGlowSample({
   timeString,
   sunriseTime,
   sunsetTime,
+  aerosol,
 }) {
   const midScore = scoreMidCloud(cloudCoverMid);
   const highScore = scoreHighCloud(cloudCoverHigh);
@@ -2008,8 +2231,9 @@ function analyzeGlowSample({
   const timeScore = Math.max(sunsetScore, sunriseScore);
   const isEvening = sunsetScore >= sunriseScore;
   const penalty = precipPenalty(precipitationProbability, precipitationAmount);
+  const aerosolScore = aerosol ? scoreAerosolForGlow(aerosol) : 0;
 
-  const rawScore = midScore + highScore + humidityScore + visScore + timeScore - lowPenalty - penalty;
+  const rawScore = midScore + highScore + humidityScore + visScore + timeScore + aerosolScore - lowPenalty - penalty;
   const score = clamp(rawScore, 0, 100);
 
   let level, label;
@@ -2022,6 +2246,7 @@ function analyzeGlowSample({
     cloudCoverMid, cloudCoverHigh, cloudCoverLow,
     humidity, visibility, timeScore, isEvening,
     precipitationProbability, precipitationAmount,
+    aerosol, aerosolScore,
   });
 
   return {
@@ -2036,6 +2261,7 @@ function analyzeGlowSample({
     humidityScore,
     visScore,
     timeScore,
+    aerosolScore,
     penalty,
     reasons,
     resultText: score >= 50 ? `${label}（${score} 分）` : `${label}（${score} 分）`,
@@ -2045,7 +2271,7 @@ function analyzeGlowSample({
   };
 }
 
-function buildGlowReasons({ cloudCoverMid, cloudCoverHigh, cloudCoverLow, humidity, visibility, timeScore, isEvening, precipitationProbability, precipitationAmount }) {
+function buildGlowReasons({ cloudCoverMid, cloudCoverHigh, cloudCoverLow, humidity, visibility, timeScore, isEvening, precipitationProbability, precipitationAmount, aerosol, aerosolScore }) {
   const reasons = [];
   const midV = Number(cloudCoverMid ?? 0);
   const highV = Number(cloudCoverHigh ?? 0);
@@ -2061,6 +2287,18 @@ function buildGlowReasons({ cloudCoverMid, cloudCoverHigh, cloudCoverLow, humidi
 
   if (highV >= 20 && highV <= 60) {
     reasons.push(`高层云量 ${Math.round(highV)}%，有利于呈现粉紫色调。`);
+  }
+
+  if (aerosol && aerosolScore > 4) {
+    const aod = Number(aerosol.aerosolOpticalDepth);
+    const pm = Number(aerosol.pm2_5);
+    if (Number.isFinite(aod) && aod > 0) {
+      reasons.push(`气溶胶光学厚度 ${aod.toFixed(2)}，米氏散射有助形成粉紫色调。`);
+    } else if (Number.isFinite(pm) && pm > 0) {
+      reasons.push(`PM2.5 约 ${Math.round(pm)} μg/m³，颗粒物正好有助渲染粉紫色霞光。`);
+    }
+  } else if (aerosol && aerosolScore <= -4) {
+    reasons.push('空气浑浊度偏高，可能遮蔽霞光透射。');
   }
 
   if (lowV >= 50) {
@@ -2081,13 +2319,13 @@ function buildGlowReasons({ cloudCoverMid, cloudCoverHigh, cloudCoverLow, humidi
     reasons.push('有降水信号，可能影响霞光可见性。');
   }
 
-  return reasons.slice(0, 4);
+  return reasons.slice(0, 5);
 }
 
 /**
  * Analyze glow potential for a full day (find best hour)
  */
-function analyzeDayGlow(hourly, start, sunriseTime, sunsetTime) {
+function analyzeDayGlow(hourly, start, sunriseTime, sunsetTime, airQuality) {
   const times = hourly.time.slice(start, start + 24);
   const midCovers = (hourly.cloud_cover_mid ?? []).slice(start, start + 24).map(v => Number(v ?? 0));
   const highCovers = (hourly.cloud_cover_high ?? []).slice(start, start + 24).map(v => Number(v ?? 0));
@@ -2096,6 +2334,8 @@ function analyzeDayGlow(hourly, start, sunriseTime, sunsetTime) {
   const visibilities = (hourly.visibility ?? []).slice(start, start + 24).map(v => Number(v ?? 0));
   const precipProbs = (hourly.precipitation_probability ?? []).slice(start, start + 24).map(v => Number(v ?? 0));
   const precipAmts = (hourly.precipitation ?? []).slice(start, start + 24).map(v => Number(v ?? 0));
+
+  const aerosolSeries = buildAerosolSeries(times, airQuality);
 
   const hourlyAnalyses = times.map((t, i) => analyzeGlowSample({
     cloudCoverMid: midCovers[i],
@@ -2108,6 +2348,7 @@ function analyzeDayGlow(hourly, start, sunriseTime, sunsetTime) {
     timeString: t,
     sunriseTime,
     sunsetTime,
+    aerosol: aerosolSeries[i],
   }));
 
   // Find best glow hour
@@ -2138,9 +2379,38 @@ function analyzeDayGlow(hourly, start, sunriseTime, sunsetTime) {
   };
 }
 
+/**
+ * Align hourly air-quality samples (different time index than weather)
+ * with the weather timeline by matching the YYYY-MM-DDTHH prefix.
+ * Returns an array of aerosol payloads (or null) per weather hour.
+ */
+function buildAerosolSeries(weatherTimes, airQuality) {
+  if (!airQuality || !Array.isArray(airQuality.time)) {
+    return weatherTimes.map(() => null);
+  }
+  const indexByPrefix = new Map();
+  airQuality.time.forEach((t, idx) => {
+    const prefix = String(t || '').slice(0, 13);
+    if (prefix && !indexByPrefix.has(prefix)) indexByPrefix.set(prefix, idx);
+  });
+
+  return weatherTimes.map((t) => {
+    const prefix = String(t || '').slice(0, 13);
+    const idx = indexByPrefix.get(prefix);
+    if (idx == null) return null;
+    return {
+      pm2_5: Number(airQuality.pm2_5?.[idx] ?? NaN),
+      pm10: Number(airQuality.pm10?.[idx] ?? NaN),
+      aerosolOpticalDepth: Number(airQuality.aerosolOpticalDepth?.[idx] ?? NaN),
+      dust: Number(airQuality.dust?.[idx] ?? NaN),
+    };
+  });
+}
+
 module.exports = {
   analyzeGlowSample,
   analyzeDayGlow,
+  scoreAerosolForGlow,
 };
 
   _cache['sunset'] = module.exports;
@@ -2590,8 +2860,8 @@ function analyzeWeather(weatherData, elevation, selectedDayIndex) {
   };
 }
 
-function analyzeGlow(hourly, start, sunrise, sunset) {
-  const result = sunsetModule.analyzeDayGlow(hourly, start, sunrise, sunset);
+function analyzeGlow(hourly, start, sunrise, sunset, airQuality) {
+  const result = sunsetModule.analyzeDayGlow(hourly, start, sunrise, sunset, airQuality);
   return {
     score: result.score,
     level: result.level,
@@ -2679,7 +2949,7 @@ module.exports = {
 // 由 shared/core 同步；请勿直接编辑。运行 npm run sync:shared 更新。
 /* SHARED CORE — single source of truth, do not edit per-end copies */
 const DEFAULT_WIDTH = 750;
-const DEFAULT_HEIGHT = 1334;
+const DEFAULT_HEIGHT = 1700;
 
 const PALETTES = {
   dark: {
@@ -2830,6 +3100,10 @@ function buildPosterModel(state) {
   const scoreText = score === null ? '--' : String(Math.round(score));
   const dateText = firstValue(safeState.dateLabel, safeState.dayLabel, safeState.dayLabels?.[safeState.selectedDayIndex || 0], safeState.date, new Date().toLocaleDateString('zh-CN'));
   const locationName = firstValue(safeState.locationName, safeState.location?.name, safeState.location, '当前位置');
+  const lat = toNumber(firstValue(safeState.lat, safeState.location?.lat, safeState.latitude));
+  const lon = toNumber(firstValue(safeState.lon, safeState.lng, safeState.location?.lon, safeState.longitude));
+  const coordsText = (lat !== null && lon !== null) ? `${lat.toFixed(4)}, ${lon.toFixed(4)}` : '';
+  const elevation = toNumber(firstValue(safeState.elevation, safeState.currentElevation));
   const cloudBase = firstValue(safeState.currentCloudBase, safeState.analysis?.cloudBase, primaryData.cloudBase);
   const visibility = firstValue(safeState.currentVisibility, safeState.analysis?.visibility, primaryData.visibility);
   const wind = firstValue(safeState.currentWind, safeState.analysis?.windSpeed, primaryData.windSpeed);
@@ -2845,6 +3119,21 @@ function buildPosterModel(state) {
     { label: '能见度', value: formatValue(toNumber(visibility) !== null && Number(visibility) > 1000 ? Number(visibility) / 1000 : visibility, 'km', 1), color: palette.warning },
     { label: '风速', value: formatValue(wind, 'm/s', 1), color: palette.star },
   ];
+
+  const predictionCards = predictions.map(item => {
+    const data = item.data || {};
+    return {
+      type: item.type,
+      icon: item.icon,
+      key: item.key,
+      score: item.score,
+      scoreText: item.score === null ? '--' : String(Math.round(item.score)),
+      label: firstValue(data.resultText, data.label, scoreLabel(item.score)),
+      summary: firstValue(data.summary, ''),
+      reasons: asArray(data.reasons).map(normalizeReason).filter(Boolean).slice(0, 2),
+      color: palette[item.colorKey] || palette.primary,
+    };
+  });
 
   const layout = [
     { type: 'title', text: `${locationName}`, value: String(dateText), color: palette.text },
@@ -2863,6 +3152,8 @@ function buildPosterModel(state) {
     height: DEFAULT_HEIGHT,
     palette,
     location: String(locationName),
+    coordsText,
+    elevation,
     date: String(dateText),
     predictionType: primary.type,
     badge: `${primary.icon} ${primary.type}`,
@@ -2870,6 +3161,7 @@ function buildPosterModel(state) {
     scoreText,
     confidence: confidenceLabel(safeState, score),
     summary: firstValue(primaryData.summary, safeState.analysis?.summary, ''),
+    predictions: predictionCards,
     kpis,
     reasons,
     hints,
