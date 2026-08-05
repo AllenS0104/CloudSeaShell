@@ -13,6 +13,7 @@
  */
 
 const calc = require('./calculations');
+const { CLOUD_SEA_GO } = require('./thresholds');
 
 const MODELS = [
   { id: 'icon_seamless', name: 'ICON（德国）', weight: 1.0 },
@@ -51,7 +52,13 @@ async function fetchModelWeather(lat, lon, modelId) {
   const params = [
     `latitude=${lat}`,
     `longitude=${lon}`,
-    'hourly=temperature_2m,apparent_temperature,relative_humidity_2m,dew_point_2m,pressure_msl,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,precipitation,visibility,precipitation_probability,wind_speed_10m,weather_code,cape,is_day',
+    // Pressure-level temperatures are REQUIRED: without them
+    // scoreVerticalInversion() reports "unavailable" and the scorer silently
+    // falls back to the surface time-series proxy, which flags an inversion
+    // on ~96% of days (ground truth ~10%) because rising daytime surface
+    // temperature looks identical to an inversion. All four models supply
+    // them, so the fusion path must request them just like the main path.
+    'hourly=temperature_2m,apparent_temperature,relative_humidity_2m,dew_point_2m,pressure_msl,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,precipitation,visibility,precipitation_probability,wind_speed_10m,weather_code,cape,is_day,temperature_925hPa,temperature_850hPa,temperature_700hPa',
     'daily=sunrise,sunset',
     'timezone=Asia/Shanghai',
     // Open-Meteo's parameter is "models" (plural). With the singular
@@ -177,7 +184,7 @@ function fuseModelPredictions(modelResults, elevation, dayIndex = 0) {
   return {
     fusedScore,
     fusedConfidence,
-    fusedSuggestion: fusedScore >= 55,
+    fusedSuggestion: fusedScore >= CLOUD_SEA_GO,
     agreement,
     stdDev: Math.round(stdDev * 10) / 10,
     modelCount: analyses.length,
@@ -190,7 +197,7 @@ function fuseModelPredictions(modelResults, elevation, dayIndex = 0) {
       suggestion: a.suggestion,
       label: a.confidenceLabel,
     })),
-    resultText: fusedScore >= 55
+    resultText: fusedScore >= CLOUD_SEA_GO
       ? `${fusedConfidence.label}（融合 ${fusedScore} 分）`
       : `概率偏低（融合 ${fusedScore} 分）`,
     summary: generateFusedSummary(fusedScore, analyses, agreement, inversionConsensus),
@@ -212,7 +219,7 @@ function generateFusedSummary(fusedScore, analyses, agreement, inversionConsensu
     parts.push('多数模式检测到逆温层，有利于云海形成');
   }
 
-  if (fusedScore >= 55) {
+  if (fusedScore >= CLOUD_SEA_GO) {
     parts.push('整体条件具备云海观测潜力。');
   } else {
     parts.push('整体条件一般，更适合作为参考。');

@@ -8,7 +8,24 @@
     root.CloudSeaCore.createFeedback = api.createFeedback;
   }
 })(typeof globalThis !== 'undefined' ? globalThis : this, function() {
-  const STORAGE_KEY = 'cloudsea_feedback_records';
+  // 本模块以 UMD 方式加载：Node/小程序走 require，浏览器里由先加载的 bundle.js
+  // 把常量挂到 CloudSea.thresholds。两条路都拿不到就直接报错，避免阈值静默变成
+  // undefined 导致「永远判为没有云海」。
+  const CLOUD_SEA_GO = (function resolveGoThreshold() {
+    if (typeof require === 'function') {
+      try {
+        return require('./thresholds').CLOUD_SEA_GO;
+      } catch (e) { /* 浏览器场景，落到全局命名空间 */ }
+    }
+    const g = typeof globalThis !== 'undefined' ? globalThis : {};
+    const fromGlobal = g.CloudSea && g.CloudSea.thresholds && g.CloudSea.thresholds.CLOUD_SEA_GO;
+    if (typeof fromGlobal !== 'number') {
+      throw new Error('feedback-core: 无法解析 CLOUD_SEA_GO 阈值，请确认 thresholds 模块已加载');
+    }
+    return fromGlobal;
+  })();
+
+  const STORAGE_KEY = 'cloudsea_feedback_records';
   const noopStorage = { get() { return null; }, set() {}, remove() {}, keys() { return []; } };
 
   function createFeedback(options) {
@@ -133,7 +150,7 @@
         if (act.cloudSea !== null) {
           cloudSeaTotal++;
           comparisons++;
-          const predicted = (pred.cloudSea && pred.cloudSea.score >= 55);
+          const predicted = (pred.cloudSea && pred.cloudSea.score >= CLOUD_SEA_GO);
           if (predicted === act.cloudSea) {
             cloudSeaMatch++;
             matches++;

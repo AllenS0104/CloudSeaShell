@@ -28,6 +28,7 @@ const androidAssetsDir = path.join(
 
 const order = [
   'math-utils',
+  'thresholds',
   'i18n',
   'scoring',
   'guidance',
@@ -85,6 +86,7 @@ global.CloudSea.photography = _cache['photography'];
 global.CloudSea.stargazing = _cache['stargazing'];
 global.CloudSea.sunset = _cache['sunset'];
 global.CloudSea.mathUtils = _cache['math-utils'];
+global.CloudSea.thresholds = _cache['thresholds'];
 global.CloudSea.posterLayout = _cache['poster-layout'];
 })(window);
 `;

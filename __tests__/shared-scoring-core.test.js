@@ -1,4 +1,5 @@
 const scoring = require('../shared/core/scoring');
+const { CLOUD_SEA_GO, CLOUD_SEA_STRONG, CLOUD_SEA_WATCH } = require('../shared/core/thresholds');
 
 describe('评分核心边界', () => {
   test('各项气象评分覆盖高低和插值区间', () => {
@@ -42,10 +43,11 @@ describe('评分核心边界', () => {
     expect(scoring.scoreInversion([10, 12, 14])).toMatchObject({ detected: true, score: 5 });
     expect(scoring.scoreInversion([10, 11.5, 11])).toMatchObject({ detected: true });
     expect(scoring.scoreInversion([10, 9])).toMatchObject({ detected: false, score: 0 });
-    expect(scoring.scoreToConfidence(80)).toEqual({ label: '高把握', level: 'high' });
-    expect(scoring.scoreToConfidence(60).level).toBe('medium');
-    expect(scoring.scoreToConfidence(40).level).toBe('low');
-    expect(scoring.scoreToConfidence(20).level).toBe('very-low');
+    expect(scoring.scoreToConfidence(CLOUD_SEA_STRONG + 5)).toEqual({ label: '高把握', level: 'high' });
+    expect(scoring.scoreToConfidence(CLOUD_SEA_GO).level).toBe('medium');
+    expect(scoring.scoreToConfidence(CLOUD_SEA_GO - 1).level).toBe('low');
+    expect(scoring.scoreToConfidence(CLOUD_SEA_WATCH).level).toBe('low');
+    expect(scoring.scoreToConfidence(CLOUD_SEA_WATCH - 1).level).toBe('very-low');
     expect(scoring.compositeReliabilityPenalty({ humidity: 90, windSpeed: 12, cloudCover: 80, lowCloudCover: 10, inversionDetected: false, dewPointGap: 1, precipitationProbability: 70 })).toBe(18);
     expect(scoring.compositeReliabilityPenalty({ humidity: 50, windSpeed: 2, cloudCover: 20, lowCloudCover: 10, inversionDetected: true, dewPointGap: 5, precipitationProbability: 0 })).toBe(0);
   });

@@ -1,4 +1,5 @@
 // 由 shared/core 同步；请勿直接编辑。运行 npm run sync:shared 更新。
+const { CLOUD_SEA_GO } = require('./thresholds');
 /**
  * Photography parameter recommendation for cloud-sea observation
  *
@@ -108,7 +109,7 @@ function generateCameraParams(ev, lighting, windSpeed, cloudSeaScore) {
   const isGolden = lighting.phase.includes('golden') || lighting.phase.includes('sunrise') || lighting.phase.includes('sunset');
   const isBluehour = lighting.phase.includes('blue-hour');
   const isNight = lighting.phase === 'night';
-  const hasCloudSea = cloudSeaScore >= 55;
+  const hasCloudSea = cloudSeaScore >= CLOUD_SEA_GO;
   const windCalm = (windSpeed ?? 0) <= 5;
 
   // Aperture: landscape sharpness sweet spot
@@ -195,7 +196,7 @@ function generateCameraParams(ev, lighting, windSpeed, cloudSeaScore) {
  */
 function generatePhoneParams(ev, lighting, windSpeed, cloudSeaScore) {
   const isLowLight = ev <= 8;
-  const hasCloudSea = cloudSeaScore >= 55;
+  const hasCloudSea = cloudSeaScore >= CLOUD_SEA_GO;
   const windCalm = (windSpeed ?? 0) <= 5;
   const isBluehour = lighting.phase.includes('blue-hour');
   const isNight = lighting.phase === 'night';
@@ -251,7 +252,7 @@ function generatePhoneParams(ev, lighting, windSpeed, cloudSeaScore) {
  */
 function getFilterRecommendations(lighting, cloudSeaScore, windSpeed) {
   const filters = [];
-  const hasCloudSea = cloudSeaScore >= 55;
+  const hasCloudSea = cloudSeaScore >= CLOUD_SEA_GO;
   const windCalm = (windSpeed ?? 0) <= 5;
 
   if (hasCloudSea && windCalm) {
@@ -275,7 +276,7 @@ function getFilterRecommendations(lighting, cloudSeaScore, windSpeed) {
  * Exposure table: multiple equivalent exposures for current EV (Planit style)
  */
 function buildExposureTable(ev, cloudSeaScore) {
-  const hasCloudSea = cloudSeaScore >= 55;
+  const hasCloudSea = cloudSeaScore >= CLOUD_SEA_GO;
   const table = [];
 
   // EV = log2(f² / t) + log2(ISO/100)
@@ -414,7 +415,7 @@ function calculateNDStops(ev, targetShutterSec, aperture, iso) {
  * Timelapse recommendation for cloud sea
  */
 function buildTimelapseParams(cloudSeaScore, windSpeed, lighting) {
-  const hasCloudSea = cloudSeaScore >= 55;
+  const hasCloudSea = cloudSeaScore >= CLOUD_SEA_GO;
   const windCalm = (windSpeed ?? 0) <= 5;
 
   let interval, duration, frames, note;
@@ -521,7 +522,7 @@ function generatePhotoRecommendations({
   const timeline = buildShootingTimeline(sunriseTime, sunsetTime);
 
   const composition = [];
-  if (cloudSeaScore >= 55) {
+  if (cloudSeaScore >= CLOUD_SEA_GO) {
     composition.push('前景放入山石/树木/人物剪影增加纵深');
     composition.push('寻找云海"瀑布"（翻越山脊的云流）');
     composition.push('等待光线穿透云层的"耶稣光"瞬间');
@@ -559,7 +560,7 @@ function buildPhotoSummary(lighting, score, windSpeed) {
 
   if (score >= 75) {
     parts.push('云海条件极佳，强烈建议出片');
-  } else if (score >= 55) {
+  } else if (score >= CLOUD_SEA_GO) {
     parts.push('有云海潜力，值得守候拍摄');
   } else {
     parts.push('云海概率偏低，可练习风景构图');

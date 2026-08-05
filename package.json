@@ -20,7 +20,11 @@
     "validate:waypoints": "node scripts/validate-waypoints.js",
     "ingest:xhs": "node scripts/fetch-xhs-notes.js",
     "backtest:glow": "node miniprogram/utils/tests/glow-backtest.js",
-    "backtest:cloudsea": "node miniprogram/utils/tests/backtest.js"
+    "backtest:cloudsea": "node miniprogram/utils/tests/backtest.js",
+    "audit:prediction": "node miniprogram/utils/tests/prediction-audit.js",
+    "ingest:social": "node scripts/social-ingest.js",
+    "ingest:commons": "node scripts/social-ingest.js --source commons-sweep --out data/observations-commons.json",
+    "audit:global": "node miniprogram/utils/tests/prediction-audit.js --controls=2 --commons"
   },
   "dependencies": {
     "react": "19.1.0",

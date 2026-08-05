@@ -6,7 +6,9 @@ const path = require('path');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'miniprogram', 'utils', 'camera-presets.js'), 'utf-8');
 const cjs = src.replace(/^module\.exports\s*=\s*\{[\s\S]*?\};?\s*$/m, '');
-const mod = new Function(`${cjs}\nreturn { CAMERA_PRESETS, PHONE_PRESETS, getCameraRecommendation, getPhoneRecommendation, getAllCameraPresets, getAllPhonePresets };`)();
+// 该模块 require('./thresholds')，沙箱里没有模块系统，注入一个最小 require 垫片。
+const requireShim = (name) => require(path.join(__dirname, '..', 'miniprogram', 'utils', name));
+const mod = new Function('require', `${cjs}\nreturn { CAMERA_PRESETS, PHONE_PRESETS, getCameraRecommendation, getPhoneRecommendation, getAllCameraPresets, getAllPhonePresets };`)(requireShim);
 
 // ─── Database Integrity ─────────────────────────────────────
 

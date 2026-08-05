@@ -16,6 +16,7 @@ if (typeof wx === 'undefined') {
 
 const https = require('https');
 const calc = require('../calculations');
+const { CLOUD_SEA_GO } = require('../thresholds');
 
 const observations = [
   // === 2026年4月 正样本 (小红书) ===
@@ -277,9 +278,14 @@ async function runBacktest() {
     console.log(`\n   实际出现云海时的评分分布:`);
     console.log(`   平均: ${avgScore} | 最低: ${minScore} | 最高: ${maxScore}`);
     
-    if (minScore < 55) {
-      console.log(`   ⚠️  有 ${observedScores.filter(s => s < 55).length} 次实际出现云海但评分低于 55 分阈值`);
-      console.log(`   💡 建议：考虑将阈值从 55 降至 ${Math.max(35, minScore - 5)} 以提高召回率`);
+    if (minScore < CLOUD_SEA_GO) {
+      console.log(`   ⚠️  有 ${observedScores.filter(s => s < CLOUD_SEA_GO).length} 次实际出现云海但评分低于 ${CLOUD_SEA_GO} 分阈值`);
+      // 不要因为召回率就无脑降阈值：本标注集正样本占 ~79%，降阈值只会
+      // 让模型趋近「永远说有」这个平凡基线。实测阈值降到 35 时 MCC 会变成
+      // -0.05（比随机还差）。请改用 `npm run audit:prediction` 看平衡准确率
+      // 与 MCC，在不平衡数据上那才是有意义的工作点选择依据。
+      console.log(`   ℹ️  注意：正负样本比约 ${Math.round(observedScores.length / total * 100)}:${100 - Math.round(observedScores.length / total * 100)}，`
+        + `单看召回率会误导。请运行 npm run audit:prediction 对照平凡基线与 MCC 再决定阈值。`);
     }
   }
 
@@ -313,7 +319,13 @@ async function runBacktest() {
   console.log('   注意：存在选择偏差（成功拍到云海的人更可能发帖）。');
 }
 
-runBacktest().catch(err => {
-  console.error('回测失败:', err.message);
-  process.exit(1);
-});
+// Allow other tools (e.g. the metrics harness) to reuse the labelled dataset
+// and the historical-weather fetcher without triggering a full backtest run.
+if (require.main === module) {
+  runBacktest().catch(err => {
+    console.error('回测失败:', err.message);
+    process.exit(1);
+  });
+} else {
+  module.exports = { observations, fetchHistoricalWeather };
+}

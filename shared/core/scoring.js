@@ -1,5 +1,6 @@
 /* SHARED CORE — single source of truth, do not edit per-end copies */
 const { clamp, lerp } = require('./math-utils');
+const { CLOUD_SEA_GO, CLOUD_SEA_STRONG, CLOUD_SEA_WATCH } = require('./thresholds');
 
 function scoreHumidity(humidity) {
   const v = Number(humidity ?? 0);
@@ -245,13 +246,13 @@ function compositeReliabilityPenalty({
 
 function scoreToConfidence(score) {
   const safeScore = clamp(Math.round(score), 0, 100);
-  if (safeScore >= 75) {
+  if (safeScore >= CLOUD_SEA_STRONG) {
     return { label: '高把握', level: 'high' };
   }
-  if (safeScore >= 55) {
+  if (safeScore >= CLOUD_SEA_GO) {
     return { label: '较高把握', level: 'medium' };
   }
-  if (safeScore >= 35) {
+  if (safeScore >= CLOUD_SEA_WATCH) {
     return { label: '一般', level: 'low' };
   }
   return { label: '较低', level: 'very-low' };

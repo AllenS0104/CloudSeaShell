@@ -13,6 +13,7 @@ const WAYPOINT_DATA_TARGETS = [
 ];
 
 const SHARED_MODULES = [
+  'thresholds',
   'calculations',
   'scoring',
   'analyzer',

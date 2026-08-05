@@ -13,6 +13,7 @@ const path = require('path');
 // Source of truth: shared/core/calculations.js (CommonJS).
 // The Android assets and web bundle are synced from this file via `npm run sync:shared`.
 const calc = require(path.join('..', 'shared', 'core', 'calculations.js'));
+const { CLOUD_SEA_GO, CLOUD_SEA_STRONG, CLOUD_SEA_WATCH } = require(path.join('..', 'shared', 'core', 'thresholds.js'));
 
 // ─── Cloud Base ─────────────────────────────────────────────
 
@@ -80,21 +81,23 @@ describe('scoreInversion', () => {
 // ─── Score to Confidence ────────────────────────────────────
 
 describe('scoreToConfidence', () => {
-  test('high confidence at 75+', () => {
-    expect(calc.scoreToConfidence(80).level).toBe('high');
-    expect(calc.scoreToConfidence(75).level).toBe('high');
+  test('high confidence at or above CLOUD_SEA_STRONG', () => {
+    expect(calc.scoreToConfidence(CLOUD_SEA_STRONG + 5).level).toBe('high');
+    expect(calc.scoreToConfidence(CLOUD_SEA_STRONG).level).toBe('high');
   });
 
-  test('medium confidence at 55-74', () => {
-    expect(calc.scoreToConfidence(60).level).toBe('medium');
+  test('medium confidence between CLOUD_SEA_GO and CLOUD_SEA_STRONG', () => {
+    expect(calc.scoreToConfidence(CLOUD_SEA_GO).level).toBe('medium');
+    expect(calc.scoreToConfidence(CLOUD_SEA_STRONG - 1).level).toBe('medium');
   });
 
-  test('low confidence at 35-54', () => {
-    expect(calc.scoreToConfidence(40).level).toBe('low');
+  test('low confidence between CLOUD_SEA_WATCH and CLOUD_SEA_GO', () => {
+    expect(calc.scoreToConfidence(CLOUD_SEA_WATCH).level).toBe('low');
+    expect(calc.scoreToConfidence(CLOUD_SEA_GO - 1).level).toBe('low');
   });
 
-  test('very-low confidence below 35', () => {
-    expect(calc.scoreToConfidence(20).level).toBe('very-low');
+  test('very-low confidence below CLOUD_SEA_WATCH', () => {
+    expect(calc.scoreToConfidence(CLOUD_SEA_WATCH - 1).level).toBe('very-low');
     expect(calc.scoreToConfidence(0).level).toBe('very-low');
   });
 

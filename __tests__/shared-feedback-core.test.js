@@ -1,4 +1,5 @@
 const { createFeedback, constants } = require('../shared/core/feedback-core');
+const { CLOUD_SEA_GO } = require('../shared/core/thresholds');
 
 function storageWith(value) { const data = { [constants.STORAGE_KEY]: value }; return { get: jest.fn(k => data[k]), set: jest.fn((k, v) => { data[k] = v; }), remove: jest.fn(), keys: jest.fn(), data }; }
 
@@ -18,7 +19,7 @@ describe('反馈核心记录', () => {
   });
 
   test('更新反馈和统计会按阈值计算命中率', () => {
-    const records = [{ id: 'a', date: '2026-05-01', location: { lat: 1, lon: 2, name: 'A' }, predictions: { cloudSea: { score: 70 }, glow: { score: 30 }, stars: { score: 80 } }, actual: { cloudSea: true, glow: false, stars: false, rating: 4, note: 'ok' } }];
+    const records = [{ id: 'a', date: '2026-05-01', location: { lat: 1, lon: 2, name: 'A' }, predictions: { cloudSea: { score: CLOUD_SEA_GO }, glow: { score: 30 }, stars: { score: 80 } }, actual: { cloudSea: true, glow: false, stars: false, rating: 4, note: 'ok' } }];
     const feedback = createFeedback({ storage: storageWith(records) });
     expect(feedback.updateFeedback('a', { stars: true, note: '银河可见' })).toBe(true);
     expect(feedback.updateFeedback('missing', { stars: true })).toBe(false);

@@ -5,6 +5,7 @@ const DAY_BACKGROUND = '';
 const NIGHT_BACKGROUND = '';
 
 const { clamp } = require('./math-utils');
+const { CLOUD_SEA_GO } = require('./thresholds');
 const scoring = require('./scoring');
 const guidance = require('./guidance');
 
@@ -132,6 +133,62 @@ function buildReasons({
   return reasons.slice(0, 5);
 }
 
+/**
+ * True when a model supplies no usable value for an hourly variable across
+ * the requested slice (missing array, or every entry null/undefined/NaN).
+ */
+function isSeriesUnavailable(series, start, count) {
+  if (!Array.isArray(series)) return true;
+  const slice = series.slice(start, start + count);
+  if (!slice.length) return true;
+  return slice.every((value) => value === null || value === undefined || Number.isNaN(Number(value)));
+}
+
+/**
+ * Sum scoring components and normalise the result onto a 0-100 scale.
+ *
+ * Two problems are solved here.
+ *
+ * 1) Model coverage differs. Open-Meteo models disagree on which variables
+ *    they return: ICON/JMA/ECMWF return `visibility` as all-null while GFS
+ *    returns real values. Treating a missing variable as 0 silently deducted
+ *    its full weight (up to 15 points for visibility), which made those models
+ *    score systematically lower than GFS and inflated the cross-model spread
+ *    behind the "模式分歧" label. Missing components are excluded and the
+ *    remainder renormalised, keeping models comparable.
+ *
+ * 2) Score saturation. The components add up to 134 points, and the caller
+ *    used to clamp that to 100. Any day scoring 75% of the component points
+ *    therefore pegged at 100, which crushed most weather into one bucket:
+ *    an audit over 274 samples found 59% of days *without* a cloud sea still
+ *    landed in the 90-100 band, leaving specificity at 17% no matter where
+ *    the go/no-go threshold was placed. Worse, the clamp headroom silently
+ *    absorbed the precipitation and reliability penalties — a raw-134 day
+ *    could take a 30 point penalty and still display 100.
+ *    Dividing by the available maximum keeps the full range usable and makes
+ *    penalties actually visible.
+ *
+ * Returns a 0-100 value; callers subtract penalties afterwards.
+ */
+function scoreAvailableComponents(components, unavailable) {
+  let rawSum = 0;
+  let availableMax = 0;
+
+  for (const component of components) {
+    if (component.key && unavailable && unavailable[component.key]) {
+      continue;
+    }
+    rawSum += component.value;
+    availableMax += component.max;
+  }
+
+  if (availableMax <= 0) {
+    return 0;
+  }
+
+  return Math.round((rawSum / availableMax) * 100);
+}
+
 function analyzeCloudSeaSample({
   temperature,
   humidity,
@@ -152,6 +209,7 @@ function analyzeCloudSeaSample({
   inversionLayer = null,
   capePenalty = 0,
   cape = 0,
+  unavailable = null,
 }) {
   const safeTemperature = Number(temperature ?? 0);
   const safeHumidity = Number(humidity ?? 0);
@@ -172,16 +230,18 @@ function analyzeCloudSeaSample({
   const penalty = precipitationPenalty(safePrecipitationProbability, safePrecipitationAmount);
 
   const baseScore = clamp(
-    scoreHumidity(safeHumidity) +
-      scoreElevationGap(gapToElevation) +
-      scoreVisibility(safeVisibility) +
-      scoreWind(safeWindSpeed) +
-      scoreCloudCover(safeCloudCover) +
-      scoreLowCloudCover(safeLowCloudCover) +
-      scoreDewPointSpread(safeTemperature, safeDewPoint) +
-      scorePressure(safePressureMsl) +
-      timeScore +
-      inversionScore,
+    scoreAvailableComponents([
+      { max: 25, value: scoreHumidity(safeHumidity) },
+      { max: 25, value: scoreElevationGap(gapToElevation) },
+      { max: 15, value: scoreVisibility(safeVisibility), key: 'visibility' },
+      { max: 10, value: scoreWind(safeWindSpeed) },
+      { max: 8, value: scoreCloudCover(safeCloudCover) },
+      { max: 12, value: scoreLowCloudCover(safeLowCloudCover) },
+      { max: 12, value: scoreDewPointSpread(safeTemperature, safeDewPoint) },
+      { max: 5, value: scorePressure(safePressureMsl) },
+      { max: 10, value: timeScore },
+      { max: 12, value: inversionScore },
+    ], unavailable),
     0,
     100,
   );
@@ -196,7 +256,7 @@ function analyzeCloudSeaSample({
   });
   const score = clamp(baseScore - penalty - compositePenalty - Number(capePenalty || 0), 0, 100);
   const confidence = scoreToConfidence(score);
-  const suggestion = score >= 55;
+  const suggestion = score >= CLOUD_SEA_GO;
 
   return {
     cloudBase,
@@ -310,7 +370,15 @@ function fingerprintHourly(hourly, start) {
   /* eslint-disable no-bitwise */
   let hash = 0x811c9dc5;
   const mix = (value) => {
-    const n = Number.isFinite(Number(value)) ? Math.round(Number(value) * 100) : -999999;
+    // null/undefined must not collide with a real 0 reading: a model that
+    // omits a variable would otherwise share a cache entry with one that
+    // reports 0 for it.
+    let n;
+    if (value === null || value === undefined) {
+      n = -888888;
+    } else {
+      n = Number.isFinite(Number(value)) ? Math.round(Number(value) * 100) : -999999;
+    }
     hash ^= n;
     hash = Math.imul(hash, 0x01000193);
   };
@@ -350,6 +418,12 @@ function analyzeDayCloudSea(hourly, start, elevation, sunriseTimeFromAPI) {
   const temp850 = (hourly.temperature_850hPa ?? []).slice(start, start + 24);
   const temp700 = (hourly.temperature_700hPa ?? []).slice(start, start + 24);
   const capeValues = (hourly.cape ?? []).slice(start, start + 24).map((value) => Number(value ?? 0));
+  // Some Open-Meteo models (ICON/JMA/ECMWF) never return `visibility` — the
+  // array is present but entirely null. Flag it so the scorer excludes the
+  // component instead of scoring it as 0 km.
+  const unavailable = {
+    visibility: isSeriesUnavailable(hourly.visibility, start, 24),
+  };
   const sunriseTime = sunriseTimeFromAPI || timeSeries.find((timeString) => {
     const hour = new Date(timeString).getHours();
     return hour >= 5 && hour <= 7;
@@ -396,6 +470,7 @@ function analyzeDayCloudSea(hourly, start, elevation, sunriseTimeFromAPI) {
       inversionLayer,
       cape: capeAtHour,
       capePenalty,
+      unavailable,
     });
   });
   const cloudBases = hourlyAnalyses.map((analysis) => analysis.cloudBase);

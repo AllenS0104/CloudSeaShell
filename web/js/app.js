@@ -400,9 +400,9 @@
     var starScore = starInfo?.score || 0;
 
     var heroCard = null;
-    if (cloudScore >= 70 && glowScore >= 60) {
+    if (cloudScore >= CS.thresholds.CLOUD_SEA_GO && glowScore >= 60) {
       heroCard = { emoji: '🔥', text: '今日大片日！云海+晚霞双绝，必须出发', bgClass: 'hero-epic' };
-    } else if (cloudScore >= 55) {
+    } else if (cloudScore >= CS.thresholds.CLOUD_SEA_GO) {
       heroCard = { emoji: '☁️', text: '云海有戏，建议守候', bgClass: 'hero-cloud' };
     } else if (glowScore >= 60) {
       heroCard = { emoji: '🌅', text: '晚霞概率较高，日落前到位', bgClass: 'hero-glow' };

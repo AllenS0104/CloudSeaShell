@@ -1,4 +1,5 @@
 const photo = require('../shared/core/photography');
+const { CLOUD_SEA_GO } = require('../shared/core/thresholds');
 
 describe('摄影推荐核心', () => {
   test('光线阶段覆盖日出日落、夜间、日间和未知', () => {
@@ -34,7 +35,7 @@ describe('摄影推荐核心', () => {
     expect(night.camera.shutter).toBe('15s - 30s');
     expect(night.phone.mode).toBe('夜景模式');
     expect(night.exposureTable.some(row => row.scene.includes('夜景'))).toBe(true);
-    const windy = photo.generatePhotoRecommendations({ timeString: '2026-06-01T19:10:00+08:00', sunriseTime: '2026-06-01T06:00:00+08:00', sunsetTime: '2026-06-01T18:30:00+08:00', cloudCover: 90, visibility: 1000, windSpeed: 12, cloudSeaScore: 60, elevation: 500 });
+    const windy = photo.generatePhotoRecommendations({ timeString: '2026-06-01T19:10:00+08:00', sunriseTime: '2026-06-01T06:00:00+08:00', sunsetTime: '2026-06-01T18:30:00+08:00', cloudCover: 90, visibility: 1000, windSpeed: 12, cloudSeaScore: CLOUD_SEA_GO + 5, elevation: 500 });
     expect(windy.camera.shutter).toContain('1/125s');
     expect(windy.filters.some(f => f.name.includes('UV'))).toBe(true);
     expect(windy.summary).toContain('风大');

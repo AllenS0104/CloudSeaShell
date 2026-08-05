@@ -14,7 +14,11 @@ const vm = require('vm');
 const WEB_JS = path.join(__dirname, '..', 'web', 'js');
 
 function loadFusion() {
-  const CS = { calc: require('../shared/core/calculations.js') };
+  const CS = {
+    calc: require('../shared/core/calculations.js'),
+    // 生产环境里 bundle.js 会把阈值常量挂到 CloudSea.thresholds，fusion.js 直接读它。
+    thresholds: require('../shared/core/thresholds.js'),
+  };
   const win = { CloudSea: CS };
   const ctx = { window: win, console: { warn() {}, log() {} }, Math, Date, JSON, Number, String, Array, Object, isNaN, parseFloat, parseInt, fetch: () => Promise.reject(new Error('no network')) };
   vm.createContext(ctx);

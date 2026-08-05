@@ -1,4 +1,5 @@
 const feedback = require('../../utils/feedback');
+const { CLOUD_SEA_GO } = require('../../utils/thresholds');
 
 Page({
   data: {
@@ -33,7 +34,7 @@ Page({
       const starsStatus = this.getFeedbackStatus(act.stars);
 
       // 准确性标记：预测高分但实际未出现=miss，预测准确=hit
-      const cloudAccuracy = this.getAccuracy(cloudScore, 55, act.cloudSea);
+      const cloudAccuracy = this.getAccuracy(cloudScore, CLOUD_SEA_GO, act.cloudSea);
       const glowAccuracy = this.getAccuracy(glowScore, 60, act.glow);
       const starsAccuracy = this.getAccuracy(starsScore, 60, act.stars);
 

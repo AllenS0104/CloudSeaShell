@@ -1,4 +1,5 @@
 /* SHARED CORE — single source of truth, do not edit per-end copies */
+const { CLOUD_SEA_GO } = require('./thresholds');
 /**
  * Camera & phone presets database
  * Real-world device specs for accurate parameter recommendations
@@ -205,7 +206,7 @@ function getCameraRecommendation(presetId, ev, lighting, windSpeed, cloudSeaScor
   const preset = CAMERA_PRESETS[presetId];
   if (!preset) return null;
 
-  const hasCloudSea = cloudSeaScore >= 55;
+  const hasCloudSea = cloudSeaScore >= CLOUD_SEA_GO;
   const windCalm = (windSpeed ?? 0) <= 5;
   const isNight = lighting.phase === 'night';
   const isBluehour = lighting.phase.includes('blue-hour');
@@ -275,7 +276,7 @@ function getPhoneRecommendation(presetId, cloudSeaScore, lighting, windSpeed) {
   const preset = PHONE_PRESETS[presetId];
   if (!preset) return null;
 
-  const hasCloudSea = cloudSeaScore >= 55;
+  const hasCloudSea = cloudSeaScore >= CLOUD_SEA_GO;
   const windCalm = (windSpeed ?? 0) <= 5;
   const isNight = lighting?.phase === 'night';
   const isBluehour = (lighting?.phase || '').includes('blue-hour');

@@ -29,6 +29,54 @@ module.exports = { clamp, lerp };
   _cache['math-utils'] = module.exports;
 })();
 
+// === thresholds ===
+(function() {
+  var module = { exports: {} };
+  var exports = module.exports;
+// 由 shared/core 同步；请勿直接编辑。运行 npm run sync:shared 更新。
+/* SHARED CORE — single source of truth, do not edit per-end copies */
+/**
+ * 云海评分的判定阈值。
+ *
+ * 这里集中定义是为了避免「魔法数字」再次散落到十几个模块里 —— 调阈值时
+ * 漏改任何一处，都会让 UI 文案、拍摄建议和 go/no-go 结论互相打架。
+ *
+ * 【定标依据】运行 npm run audit:prediction 可复现。
+ * 审计用 274 条样本（84 条人工标注正样本 + 22 条人工标注负样本 + 168 条
+ * 同机位同月的控制日），把正样本占比从有偏的 79.2% 拉回到 30.7%。
+ *
+ * 阈值 55 的问题：当时组件分合计 134 后被 clamp 到 100，造成分数饱和，
+ * 59% 的「没有云海」的日子也落在 90-100 档，特异度只有 13.6%，模型准确率
+ * 80.2% 对比「永远说有云海」的平凡基线 79.2%，只高 0.9 个百分点。
+ *
+ * 修掉 clamp 饱和（改为按可用组件线性归一）后分数重新铺开，阈值需要重新定标。
+ * 两个面板的平衡准确率在 75 同时取得最优（面板 A 65.0% / 面板 B 60.2%），
+ * 是唯一的稳健一致点，故取 75。代价是召回率降到 ~62% —— 对「专程上山看云海」
+ * 这种高成本行动，少推荐胜过频繁放空枪。
+ *
+ * 【仍未解决】AUC 只有 0.60~0.67，低于 0.7 的可用线。也就是说模型的排序能力
+ * 本身仍然偏弱，靠挪阈值救不回来，需要改进特征或引入新数据源。改这里的数字
+ * 前请务必重跑审计，不要凭直觉调。
+ */
+
+// 建议出行（go）：suggestion / hasCloudSea 的判定线。
+const CLOUD_SEA_GO = 75;
+
+// 值得专程冲一趟：审计中该档特异度 90.9%，足够选择性。
+const CLOUD_SEA_STRONG = 85;
+
+// 可以观望：低于此线召回率已接近饱和，基本不必考虑。
+const CLOUD_SEA_WATCH = 35;
+
+module.exports = {
+  CLOUD_SEA_GO,
+  CLOUD_SEA_STRONG,
+  CLOUD_SEA_WATCH,
+};
+
+  _cache['thresholds'] = module.exports;
+})();
+
 // === i18n ===
 (function() {
   var module = { exports: {} };
@@ -239,6 +287,7 @@ module.exports = { t, setLocale, getLocale, getSupportedLocales };
 // 由 shared/core 同步；请勿直接编辑。运行 npm run sync:shared 更新。
 /* SHARED CORE — single source of truth, do not edit per-end copies */
 const { clamp, lerp } = require('./math-utils');
+const { CLOUD_SEA_GO, CLOUD_SEA_STRONG, CLOUD_SEA_WATCH } = require('./thresholds');
 
 function scoreHumidity(humidity) {
   const v = Number(humidity ?? 0);
@@ -484,13 +533,13 @@ function compositeReliabilityPenalty({
 
 function scoreToConfidence(score) {
   const safeScore = clamp(Math.round(score), 0, 100);
-  if (safeScore >= 75) {
+  if (safeScore >= CLOUD_SEA_STRONG) {
     return { label: '高把握', level: 'high' };
   }
-  if (safeScore >= 55) {
+  if (safeScore >= CLOUD_SEA_GO) {
     return { label: '较高把握', level: 'medium' };
   }
-  if (safeScore >= 35) {
+  if (safeScore >= CLOUD_SEA_WATCH) {
     return { label: '一般', level: 'low' };
   }
   return { label: '较低', level: 'very-low' };
@@ -522,6 +571,9 @@ module.exports = {
   var module = { exports: {} };
   var exports = module.exports;
 // 由 shared/core 同步；请勿直接编辑。运行 npm run sync:shared 更新。
+/* SHARED CORE — single source of truth, do not edit per-end copies */
+const { CLOUD_SEA_GO, CLOUD_SEA_STRONG, CLOUD_SEA_WATCH } = require('./thresholds');
+
 function formatTimeLabel(timeString) {
   if (!timeString) {
     return '--:--';
@@ -584,14 +636,14 @@ function buildObservationGuidance({
   bestTimeLabel,
 }) {
   const targetElevation = recommendedTargetElevation(analysis.cloudBase, currentElevation);
-  const goLevel = analysis.score >= 75
+  const goLevel = analysis.score >= CLOUD_SEA_STRONG
     ? '值得冲'
-    : analysis.score >= 55
+    : analysis.score >= CLOUD_SEA_GO
       ? '可以蹲守'
-      : analysis.score >= 35
+      : analysis.score >= CLOUD_SEA_WATCH
         ? '可观望'
         : '不建议专程前往';
-  const goClass = analysis.score >= 55 ? 'go' : analysis.score >= 35 ? 'watch' : 'stop';
+  const goClass = analysis.score >= CLOUD_SEA_GO ? 'go' : analysis.score >= CLOUD_SEA_WATCH ? 'watch' : 'stop';
 
   const actionItems = [];
   if (analysis.precipitationProbability >= 60 || analysis.precipitationAmount >= 0.8) {
@@ -652,6 +704,7 @@ const DAY_BACKGROUND = '';
 const NIGHT_BACKGROUND = '';
 
 const { clamp } = require('./math-utils');
+const { CLOUD_SEA_GO } = require('./thresholds');
 const scoring = require('./scoring');
 const guidance = require('./guidance');
 
@@ -779,6 +832,62 @@ function buildReasons({
   return reasons.slice(0, 5);
 }
 
+/**
+ * True when a model supplies no usable value for an hourly variable across
+ * the requested slice (missing array, or every entry null/undefined/NaN).
+ */
+function isSeriesUnavailable(series, start, count) {
+  if (!Array.isArray(series)) return true;
+  const slice = series.slice(start, start + count);
+  if (!slice.length) return true;
+  return slice.every((value) => value === null || value === undefined || Number.isNaN(Number(value)));
+}
+
+/**
+ * Sum scoring components and normalise the result onto a 0-100 scale.
+ *
+ * Two problems are solved here.
+ *
+ * 1) Model coverage differs. Open-Meteo models disagree on which variables
+ *    they return: ICON/JMA/ECMWF return `visibility` as all-null while GFS
+ *    returns real values. Treating a missing variable as 0 silently deducted
+ *    its full weight (up to 15 points for visibility), which made those models
+ *    score systematically lower than GFS and inflated the cross-model spread
+ *    behind the "模式分歧" label. Missing components are excluded and the
+ *    remainder renormalised, keeping models comparable.
+ *
+ * 2) Score saturation. The components add up to 134 points, and the caller
+ *    used to clamp that to 100. Any day scoring 75% of the component points
+ *    therefore pegged at 100, which crushed most weather into one bucket:
+ *    an audit over 274 samples found 59% of days *without* a cloud sea still
+ *    landed in the 90-100 band, leaving specificity at 17% no matter where
+ *    the go/no-go threshold was placed. Worse, the clamp headroom silently
+ *    absorbed the precipitation and reliability penalties — a raw-134 day
+ *    could take a 30 point penalty and still display 100.
+ *    Dividing by the available maximum keeps the full range usable and makes
+ *    penalties actually visible.
+ *
+ * Returns a 0-100 value; callers subtract penalties afterwards.
+ */
+function scoreAvailableComponents(components, unavailable) {
+  let rawSum = 0;
+  let availableMax = 0;
+
+  for (const component of components) {
+    if (component.key && unavailable && unavailable[component.key]) {
+      continue;
+    }
+    rawSum += component.value;
+    availableMax += component.max;
+  }
+
+  if (availableMax <= 0) {
+    return 0;
+  }
+
+  return Math.round((rawSum / availableMax) * 100);
+}
+
 function analyzeCloudSeaSample({
   temperature,
   humidity,
@@ -799,6 +908,7 @@ function analyzeCloudSeaSample({
   inversionLayer = null,
   capePenalty = 0,
   cape = 0,
+  unavailable = null,
 }) {
   const safeTemperature = Number(temperature ?? 0);
   const safeHumidity = Number(humidity ?? 0);
@@ -819,16 +929,18 @@ function analyzeCloudSeaSample({
   const penalty = precipitationPenalty(safePrecipitationProbability, safePrecipitationAmount);
 
   const baseScore = clamp(
-    scoreHumidity(safeHumidity) +
-      scoreElevationGap(gapToElevation) +
-      scoreVisibility(safeVisibility) +
-      scoreWind(safeWindSpeed) +
-      scoreCloudCover(safeCloudCover) +
-      scoreLowCloudCover(safeLowCloudCover) +
-      scoreDewPointSpread(safeTemperature, safeDewPoint) +
-      scorePressure(safePressureMsl) +
-      timeScore +
-      inversionScore,
+    scoreAvailableComponents([
+      { max: 25, value: scoreHumidity(safeHumidity) },
+      { max: 25, value: scoreElevationGap(gapToElevation) },
+      { max: 15, value: scoreVisibility(safeVisibility), key: 'visibility' },
+      { max: 10, value: scoreWind(safeWindSpeed) },
+      { max: 8, value: scoreCloudCover(safeCloudCover) },
+      { max: 12, value: scoreLowCloudCover(safeLowCloudCover) },
+      { max: 12, value: scoreDewPointSpread(safeTemperature, safeDewPoint) },
+      { max: 5, value: scorePressure(safePressureMsl) },
+      { max: 10, value: timeScore },
+      { max: 12, value: inversionScore },
+    ], unavailable),
     0,
     100,
   );
@@ -843,7 +955,7 @@ function analyzeCloudSeaSample({
   });
   const score = clamp(baseScore - penalty - compositePenalty - Number(capePenalty || 0), 0, 100);
   const confidence = scoreToConfidence(score);
-  const suggestion = score >= 55;
+  const suggestion = score >= CLOUD_SEA_GO;
 
   return {
     cloudBase,
@@ -957,7 +1069,15 @@ function fingerprintHourly(hourly, start) {
   /* eslint-disable no-bitwise */
   let hash = 0x811c9dc5;
   const mix = (value) => {
-    const n = Number.isFinite(Number(value)) ? Math.round(Number(value) * 100) : -999999;
+    // null/undefined must not collide with a real 0 reading: a model that
+    // omits a variable would otherwise share a cache entry with one that
+    // reports 0 for it.
+    let n;
+    if (value === null || value === undefined) {
+      n = -888888;
+    } else {
+      n = Number.isFinite(Number(value)) ? Math.round(Number(value) * 100) : -999999;
+    }
     hash ^= n;
     hash = Math.imul(hash, 0x01000193);
   };
@@ -997,6 +1117,12 @@ function analyzeDayCloudSea(hourly, start, elevation, sunriseTimeFromAPI) {
   const temp850 = (hourly.temperature_850hPa ?? []).slice(start, start + 24);
   const temp700 = (hourly.temperature_700hPa ?? []).slice(start, start + 24);
   const capeValues = (hourly.cape ?? []).slice(start, start + 24).map((value) => Number(value ?? 0));
+  // Some Open-Meteo models (ICON/JMA/ECMWF) never return `visibility` — the
+  // array is present but entirely null. Flag it so the scorer excludes the
+  // component instead of scoring it as 0 km.
+  const unavailable = {
+    visibility: isSeriesUnavailable(hourly.visibility, start, 24),
+  };
   const sunriseTime = sunriseTimeFromAPI || timeSeries.find((timeString) => {
     const hour = new Date(timeString).getHours();
     return hour >= 5 && hour <= 7;
@@ -1043,6 +1169,7 @@ function analyzeDayCloudSea(hourly, start, elevation, sunriseTimeFromAPI) {
       inversionLayer,
       cape: capeAtHour,
       capePenalty,
+      unavailable,
     });
   });
   const cloudBases = hourlyAnalyses.map((analysis) => analysis.cloudBase);
@@ -1145,6 +1272,7 @@ module.exports = Object.assign({
   var module = { exports: {} };
   var exports = module.exports;
 // 由 shared/core 同步；请勿直接编辑。运行 npm run sync:shared 更新。
+const { CLOUD_SEA_GO } = require('./thresholds');
 /**
  * Photography parameter recommendation for cloud-sea observation
  *
@@ -1254,7 +1382,7 @@ function generateCameraParams(ev, lighting, windSpeed, cloudSeaScore) {
   const isGolden = lighting.phase.includes('golden') || lighting.phase.includes('sunrise') || lighting.phase.includes('sunset');
   const isBluehour = lighting.phase.includes('blue-hour');
   const isNight = lighting.phase === 'night';
-  const hasCloudSea = cloudSeaScore >= 55;
+  const hasCloudSea = cloudSeaScore >= CLOUD_SEA_GO;
   const windCalm = (windSpeed ?? 0) <= 5;
 
   // Aperture: landscape sharpness sweet spot
@@ -1341,7 +1469,7 @@ function generateCameraParams(ev, lighting, windSpeed, cloudSeaScore) {
  */
 function generatePhoneParams(ev, lighting, windSpeed, cloudSeaScore) {
   const isLowLight = ev <= 8;
-  const hasCloudSea = cloudSeaScore >= 55;
+  const hasCloudSea = cloudSeaScore >= CLOUD_SEA_GO;
   const windCalm = (windSpeed ?? 0) <= 5;
   const isBluehour = lighting.phase.includes('blue-hour');
   const isNight = lighting.phase === 'night';
@@ -1397,7 +1525,7 @@ function generatePhoneParams(ev, lighting, windSpeed, cloudSeaScore) {
  */
 function getFilterRecommendations(lighting, cloudSeaScore, windSpeed) {
   const filters = [];
-  const hasCloudSea = cloudSeaScore >= 55;
+  const hasCloudSea = cloudSeaScore >= CLOUD_SEA_GO;
   const windCalm = (windSpeed ?? 0) <= 5;
 
   if (hasCloudSea && windCalm) {
@@ -1421,7 +1549,7 @@ function getFilterRecommendations(lighting, cloudSeaScore, windSpeed) {
  * Exposure table: multiple equivalent exposures for current EV (Planit style)
  */
 function buildExposureTable(ev, cloudSeaScore) {
-  const hasCloudSea = cloudSeaScore >= 55;
+  const hasCloudSea = cloudSeaScore >= CLOUD_SEA_GO;
   const table = [];
 
   // EV = log2(f² / t) + log2(ISO/100)
@@ -1560,7 +1688,7 @@ function calculateNDStops(ev, targetShutterSec, aperture, iso) {
  * Timelapse recommendation for cloud sea
  */
 function buildTimelapseParams(cloudSeaScore, windSpeed, lighting) {
-  const hasCloudSea = cloudSeaScore >= 55;
+  const hasCloudSea = cloudSeaScore >= CLOUD_SEA_GO;
   const windCalm = (windSpeed ?? 0) <= 5;
 
   let interval, duration, frames, note;
@@ -1667,7 +1795,7 @@ function generatePhotoRecommendations({
   const timeline = buildShootingTimeline(sunriseTime, sunsetTime);
 
   const composition = [];
-  if (cloudSeaScore >= 55) {
+  if (cloudSeaScore >= CLOUD_SEA_GO) {
     composition.push('前景放入山石/树木/人物剪影增加纵深');
     composition.push('寻找云海"瀑布"（翻越山脊的云流）');
     composition.push('等待光线穿透云层的"耶稣光"瞬间');
@@ -1705,7 +1833,7 @@ function buildPhotoSummary(lighting, score, windSpeed) {
 
   if (score >= 75) {
     parts.push('云海条件极佳，强烈建议出片');
-  } else if (score >= 55) {
+  } else if (score >= CLOUD_SEA_GO) {
     parts.push('有云海潜力，值得守候拍摄');
   } else {
     parts.push('云海概率偏低，可练习风景构图');
@@ -2421,6 +2549,7 @@ module.exports = {
   var module = { exports: {} };
   var exports = module.exports;
 // 由 shared/core 同步；请勿直接编辑。运行 npm run sync:shared 更新。
+const { CLOUD_SEA_GO } = require('./thresholds');
 /**
  * Camera & phone presets database
  * Real-world device specs for accurate parameter recommendations
@@ -2627,7 +2756,7 @@ function getCameraRecommendation(presetId, ev, lighting, windSpeed, cloudSeaScor
   const preset = CAMERA_PRESETS[presetId];
   if (!preset) return null;
 
-  const hasCloudSea = cloudSeaScore >= 55;
+  const hasCloudSea = cloudSeaScore >= CLOUD_SEA_GO;
   const windCalm = (windSpeed ?? 0) <= 5;
   const isNight = lighting.phase === 'night';
   const isBluehour = lighting.phase.includes('blue-hour');
@@ -2697,7 +2826,7 @@ function getPhoneRecommendation(presetId, cloudSeaScore, lighting, windSpeed) {
   const preset = PHONE_PRESETS[presetId];
   if (!preset) return null;
 
-  const hasCloudSea = cloudSeaScore >= 55;
+  const hasCloudSea = cloudSeaScore >= CLOUD_SEA_GO;
   const windCalm = (windSpeed ?? 0) <= 5;
   const isNight = lighting?.phase === 'night';
   const isBluehour = (lighting?.phase || '').includes('blue-hour');
@@ -3189,5 +3318,6 @@ global.CloudSea.photography = _cache['photography'];
 global.CloudSea.stargazing = _cache['stargazing'];
 global.CloudSea.sunset = _cache['sunset'];
 global.CloudSea.mathUtils = _cache['math-utils'];
+global.CloudSea.thresholds = _cache['thresholds'];
 global.CloudSea.posterLayout = _cache['poster-layout'];
 })(window);

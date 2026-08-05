@@ -9,6 +9,7 @@ if (typeof wx === 'undefined') {
 }
 
 const calc = require('../calculations');
+const { CLOUD_SEA_GO, CLOUD_SEA_STRONG, CLOUD_SEA_WATCH } = require('../thresholds');
 
 let passed = 0;
 let failed = 0;
@@ -58,10 +59,10 @@ assert(calc.dewPointSpread(null, null) === 0, 'null values = 0');
 
 // ===== scoreToConfidence =====
 console.log('\n--- scoreToConfidence ---');
-assert(calc.scoreToConfidence(80).level === 'high', '80 = high');
-assert(calc.scoreToConfidence(60).level === 'medium', '60 = medium');
-assert(calc.scoreToConfidence(40).level === 'low', '40 = low');
-assert(calc.scoreToConfidence(20).level === 'very-low', '20 = very-low');
+assert(calc.scoreToConfidence(CLOUD_SEA_STRONG).level === 'high', 'STRONG = high');
+assert(calc.scoreToConfidence(CLOUD_SEA_GO).level === 'medium', 'GO = medium');
+assert(calc.scoreToConfidence(CLOUD_SEA_WATCH).level === 'low', 'WATCH = low');
+assert(calc.scoreToConfidence(CLOUD_SEA_WATCH - 1).level === 'very-low', 'below WATCH = very-low');
 assert(calc.scoreToConfidence(0).level === 'very-low', '0 = very-low');
 assert(calc.scoreToConfidence(100).level === 'high', '100 = high');
 assert(calc.scoreToConfidence(-5).level === 'very-low', 'negative clamped');
@@ -70,14 +71,19 @@ assert(calc.scoreToConfidence(150).level === 'high', 'over 100 clamped');
 // ===== analyzeCloudSeaSample =====
 console.log('\n--- analyzeCloudSeaSample ---');
 
-// Ideal cloud sea conditions
+// Ideal cloud sea conditions.
+// 必须把日出时段和逆温也给全 —— 否则 timeScore/inversionScore 会以 0 计入
+// 134 分的分母，这个 fixture 就名不副实了（实测只有 74 分）。
 const idealResult = calc.analyzeCloudSeaSample({
   temperature: 15, humidity: 95, visibility: 15000,
   cloudCover: 70, lowCloudCover: 60, windSpeed: 2,
   dewPoint: 14, pressureMsl: 1018, precipitationProbability: 0,
-  precipitationAmount: 0, elevation: 1500, timeString: null,
+  precipitationAmount: 0, elevation: 1500,
+  timeString: '2026-05-01T06:00:00+08:00',
+  sunriseTime: '2026-05-01T06:00:00+08:00',
+  inversionScore: 12, inversionDetected: true,
 });
-assert(idealResult.score >= 60, `ideal conditions score >= 60, got ${idealResult.score}`);
+assert(idealResult.score >= CLOUD_SEA_GO, `ideal conditions score >= ${CLOUD_SEA_GO}, got ${idealResult.score}`);
 assert(idealResult.suggestion === true, 'ideal → suggestion true');
 
 // Poor conditions
@@ -124,6 +130,45 @@ assert(calc.minOrZero([3, 1, 2]) === 1, 'min of [3,1,2] = 1');
 assert(calc.minOrZero([]) === 0, 'min of [] = 0');
 assert(calc.maxOrZero([3, 1, 2]) === 3, 'max of [3,1,2] = 3');
 assert(calc.maxOrZero([]) === 0, 'max of [] = 0');
+
+// ===== missing-variable handling (model coverage gaps) =====
+console.log('\n--- missing variable renormalization ---');
+{
+  // ICON/JMA/ECMWF return `visibility` as an all-null series. Such a model
+  // must not be scored as if visibility were 0 km, otherwise it loses up to
+  // 15 points relative to GFS and corrupts multi-model fusion.
+  const hours = 24;
+  const mkHourly = (visibility) => ({
+    time: Array.from({ length: hours }, (_, i) => `2026-08-05T${String(i).padStart(2, '0')}:00`),
+    temperature_2m: new Array(hours).fill(15),
+    relative_humidity_2m: new Array(hours).fill(80),
+    dew_point_2m: new Array(hours).fill(11),
+    pressure_msl: new Array(hours).fill(1008),
+    cloud_cover: new Array(hours).fill(35),
+    cloud_cover_low: new Array(hours).fill(30),
+    wind_speed_10m: new Array(hours).fill(6),
+    precipitation: new Array(hours).fill(0),
+    precipitation_probability: new Array(hours).fill(5),
+    cape: new Array(hours).fill(0),
+    visibility,
+  });
+
+  const withVisibility = calc.analyzeDayCloudSea(mkHourly(new Array(hours).fill(20000)), 0, 600);
+  const nullVisibility = calc.analyzeDayCloudSea(mkHourly(new Array(hours).fill(null)), 0, 600);
+  const zeroVisibility = calc.analyzeDayCloudSea(mkHourly(new Array(hours).fill(0)), 0, 600);
+  const missingVisibility = calc.analyzeDayCloudSea(mkHourly(undefined), 0, 600);
+
+  assert(nullVisibility.score > zeroVisibility.score,
+    'all-null visibility must not be scored as 0 km');
+  assert(missingVisibility.score === nullVisibility.score,
+    'absent visibility series behaves like an all-null one');
+  assertApprox(nullVisibility.score, withVisibility.score, 10,
+    'model without visibility scores close to one reporting good visibility');
+  assert(Number.isInteger(nullVisibility.score),
+    'renormalized score stays an integer');
+  assert(zeroVisibility.score < withVisibility.score,
+    'a genuine 0 km visibility reading is still penalised');
+}
 
 // ===== Summary =====
 console.log(`\n${'='.repeat(40)}`);

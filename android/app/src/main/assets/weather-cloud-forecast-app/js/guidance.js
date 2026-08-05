@@ -1,4 +1,7 @@
 // 由 shared/core 同步；请勿直接编辑。运行 npm run sync:shared 更新。
+/* SHARED CORE — single source of truth, do not edit per-end copies */
+const { CLOUD_SEA_GO, CLOUD_SEA_STRONG, CLOUD_SEA_WATCH } = require('./thresholds');
+
 function formatTimeLabel(timeString) {
   if (!timeString) {
     return '--:--';
@@ -61,14 +64,14 @@ function buildObservationGuidance({
   bestTimeLabel,
 }) {
   const targetElevation = recommendedTargetElevation(analysis.cloudBase, currentElevation);
-  const goLevel = analysis.score >= 75
+  const goLevel = analysis.score >= CLOUD_SEA_STRONG
     ? '值得冲'
-    : analysis.score >= 55
+    : analysis.score >= CLOUD_SEA_GO
       ? '可以蹲守'
-      : analysis.score >= 35
+      : analysis.score >= CLOUD_SEA_WATCH
         ? '可观望'
         : '不建议专程前往';
-  const goClass = analysis.score >= 55 ? 'go' : analysis.score >= 35 ? 'watch' : 'stop';
+  const goClass = analysis.score >= CLOUD_SEA_GO ? 'go' : analysis.score >= CLOUD_SEA_WATCH ? 'watch' : 'stop';
 
   const actionItems = [];
   if (analysis.precipitationProbability >= 60 || analysis.precipitationAmount >= 0.8) {
