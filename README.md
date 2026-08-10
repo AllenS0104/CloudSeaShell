@@ -103,4 +103,8 @@ Web 与小程序的视觉变量以 `shared/design/tokens.json` 为 source of tru
 
 ## License
 
-尚未选定。在此之前默认保留所有权利。
+[MIT](./LICENSE)
+
+依赖与数据各自适用其原有许可：Open-Meteo 数据为 CC BY 4.0，
+`data/observations-commons.json` 中的观测条目源自 Wikimedia Commons
+（仅含坐标与时间等元数据，不含图片本体，每条保留 `license` 字段）。
