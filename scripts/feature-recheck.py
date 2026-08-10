@@ -136,3 +136,51 @@ for train_name, train_mask, test_name, test_mask in [
 print()
 print('  若跨源 AUC 明显低于同源 CV AUC(~0.685)，说明两个数据源学到的规律不通用，')
 print('  合并训练得到的高分有相当部分来自"识别数据来源"而非预测天气。')
+
+print()
+print('=' * 74)
+print('【复核 5】分域建模真的比合并建模好吗')
+print('=' * 74)
+print('  复核 4 证明了跨源规律不通用，于是"国内/国外各一套权重"看起来顺理成章。')
+print('  但这只是推论。同一份数据能直接检验它，就不该停在推论上。')
+print()
+print('  做法：固定同一批测试折。对每个域，比较两种训练方式在该域上的表现——')
+print('  (A) 只用本域数据训练； (B) 用全部数据训练。其余条件完全一致。')
+print()
+
+for dom_name, dom_mask in [('国内家族', ~is_ext), ('外部源家族', is_ext)]:
+    idx_dom = np.where(dom_mask)[0]
+    y_dom = y[idx_dom]
+    if len(np.unique(y_dom)) < 2:
+        continue
+    a_scores, b_scores = [], []
+    for s in (1, 7, 42, 99, 2024):
+        cv = StratifiedKFold(5, shuffle=True, random_state=s)
+        for tr_local, te_local in cv.split(X[idx_dom], y_dom):
+            te_glob = idx_dom[te_local]
+            tr_glob_dom = idx_dom[tr_local]
+            if len(np.unique(y[te_glob])) < 2:
+                continue
+            # (B) 合并训练集 = 本域训练折 + 全部他域样本（测试折始终排除在外）
+            other = np.where(~dom_mask)[0]
+            tr_glob_all = np.concatenate([tr_glob_dom, other])
+            for bucket, tr in ((a_scores, tr_glob_dom), (b_scores, tr_glob_all)):
+                if len(np.unique(y[tr])) < 2:
+                    continue
+                m = make_pipeline(SimpleImputer(strategy='median'),
+                                  GradientBoostingClassifier(random_state=s))
+                m.fit(X[tr], y[tr])
+                bucket.append(roc_auc_score(y[te_glob], m.predict_proba(X[te_glob])[:, 1]))
+    if not a_scores or not b_scores:
+        continue
+    a_m, b_m = np.mean(a_scores), np.mean(b_scores)
+    print(f'  在「{dom_name}」({dom_mask.sum()} 条) 上评测：')
+    print(f'    (A) 只用本域训练 : {a_m:.3f} ± {np.std(a_scores):.3f}')
+    print(f'    (B) 用全部数据训练: {b_m:.3f} ± {np.std(b_scores):.3f}')
+    verdict = '分域更优' if a_m - b_m > 0.02 else ('合并更优' if b_m - a_m > 0.02 else '无显著差异')
+    print(f'    → 差值 {a_m - b_m:+.3f}（{verdict}）')
+    print()
+
+print('  判读：跨源迁移差(复核 4)只说明"直接拿甲域模型套乙域"不行，')
+print('  并不自动等于"分域训练更好"——分域会让每个模型的训练量减半，')
+print('  样本量的损失可能盖过分布对齐的收益。以上面的差值为准。')
