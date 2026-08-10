@@ -90,3 +90,4 @@ build-apk.log
 .glow-backtest-cache.json
 .prediction-audit-cache.json
 
+.feature-lab-cache.json

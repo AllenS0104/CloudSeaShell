@@ -120,7 +120,11 @@
             'current=temperature_2m,apparent_temperature,relative_humidity_2m,dew_point_2m,pressure_msl,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,visibility,wind_speed_10m,wind_direction_10m,precipitation,weather_code,is_day',
             'hourly=temperature_2m,apparent_temperature,relative_humidity_2m,dew_point_2m,pressure_msl,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,precipitation,visibility,precipitation_probability,wind_speed_10m,weather_code,cape,is_day,temperature_925hPa,temperature_850hPa,temperature_700hPa',
             'daily=sunrise,sunset',
-            'timezone=Asia/Shanghai',
+            // timezone=auto 让 Open-Meteo 按坐标返回**当地**时间。
+            // 曾硬编码 Asia/Shanghai，导致境外机位的日出时刻整体偏移
+            // （如苏黎世实际 06:17 被返回为 12:17），逐小时数据也跟着错位。
+            // 对国内坐标 auto 同样解析为 Asia/Shanghai，故行为完全不变。
+            'timezone=auto',
           ].join('&');
 
           const data = await requestJson(`${WEATHER_ENDPOINTS[i]}/v1/forecast?${params}`, {
@@ -189,7 +193,7 @@
       if (cached) return cached;
 
       try {
-        const url = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${safeLat}&longitude=${safeLon}&hourly=pm2_5,pm10,aerosol_optical_depth,dust&timezone=Asia/Shanghai`;
+        const url = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${safeLat}&longitude=${safeLon}&hourly=pm2_5,pm10,aerosol_optical_depth,dust&timezone=auto`;
         const data = await requestJson(url, { timeoutMs: 8000, retries: 0 });
         if (!data || !data.hourly || !Array.isArray(data.hourly.time)) return null;
         const result = {

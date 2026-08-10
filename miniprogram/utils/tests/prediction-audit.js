@@ -27,7 +27,7 @@ const { buildControlDays } = require('./control-days');
 const CACHE_FILE = path.join(__dirname, '.prediction-audit-cache.json');
 // 评分算法一变，缓存里的旧分数就全是错的。带上版本号，改算法时把它 +1，
 // 缓存自动作废 —— 否则会拿新阈值去比旧分数，得出完全错误的结论。
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 
 function loadCache() {
   try {

@@ -157,7 +157,7 @@ function fetchHistoricalWeather(lat, lon, date) {
       `end_date=${date}`,
       `hourly=${hourlyParams}`,
       'daily=sunrise,sunset',
-      'timezone=Asia/Shanghai',
+      'timezone=auto',
     ].join('&');
 
     const url = `${baseUrl}?${params}`;
