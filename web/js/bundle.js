@@ -2212,6 +2212,7 @@ module.exports = {
   var module = { exports: {} };
   var exports = module.exports;
 // 由 shared/core 同步；请勿直接编辑。运行 npm run sync:shared 更新。
+/* SHARED CORE — single source of truth, do not edit per-end copies */
 /**
  * Sunset glow / fire cloud (晚霞/火烧云) prediction module
  *
@@ -2392,6 +2393,38 @@ function precipPenalty(precipProb, precipAmt) {
 /**
  * Aerosol bonus / penalty for sunset glow.
  *
+ * ⚠ UNVALIDATED. This curve is physical reasoning, not a measured result, and
+ * an attempt to validate it failed in an instructive way — do not repeat it.
+ * See docs/数据采集与模型审计.md.
+ *
+ * The attempt: label 85 Commons sunset photos by image-derived "blaze
+ * intensity" (scripts/glow-intensity.py), then compare aerosol on blazing vs
+ * dull days (scripts/glow-blaze-eval.js). It appeared to show a strong signal
+ * in the *opposite* direction to this curve — clean air favouring blaze, at
+ * PM2.5 AUC 0.244 and AOD 0.283, seemingly robust outside East Asia too.
+ *
+ * That signal was an artefact. Blazing samples skew to older photos (2011-13),
+ * which fall outside historical-forecast-api coverage and fall back to ERA5 —
+ * and ERA5 carries no aerosol fields. Aerosol was therefore missing for 53% of
+ * blazing samples versus 8% of dull ones, the dump encoded missing as 0, and 0
+ * sorts as "cleanest". The AUC was measuring photo age, not air quality.
+ *
+ * Restricted to samples with real data the signal evaporates:
+ *   PM2.5  n=30, AUC 0.568, 95% CI [0.289, 0.830]
+ *   AOD    n=18 (only 3 blazing), AUC 0.644, 95% CI [0.286, 1.000]
+ * Both cross 0.5. There is currently *no* evidence for either direction, so
+ * this curve is left alone rather than inverted on the strength of an artefact.
+ *
+ * Two rules this cost us, worth keeping:
+ *   1. Never encode a missing value as 0 in a dump used for ranking metrics.
+ *      0 is an extreme, not a neutral, and AUC will happily rank it.
+ *   2. When a fallback data source has different field coverage, missingness
+ *      becomes a confounder correlated with whatever caused the fallback.
+ *      Check per-class missing rates before believing any feature.
+ *
+ * To settle it properly: restrict the cohort to post-2016 photos so every
+ * sample has real aerosol data, then re-measure.
+ *
  * Per 云海和晚霞的形成.md, the dreamy pink / lilac / purple tones come
  * from Mie scattering off aerosols (火山灰、海盐、细颗粒污染物) of the
  * right size. Light pollution-free clean air is OK, but a touch of
@@ -2439,10 +2472,50 @@ function scoreAerosolForGlow({ pm2_5, aerosolOpticalDepth, dust }) {
 /**
  * Analyze sunset glow potential for a single time sample
  */
+/**
+ * Score total cloud cover — the "is there a canvas to set alight" term.
+ *
+ * Every cloud layer points in *opposite* directions under the two labels we
+ * have, and that is physics, not contradiction:
+ *
+ *   feature      P(glow visible), n=255   P(blazing | visible), n=61
+ *   cloudTotal   0.464                    0.650
+ *   cloudLow     0.422                    0.613
+ *   cloudMid     0.457                    0.607
+ *   humidity     0.440                    0.635
+ *
+ * Cloud blocks the view, but without cloud there is nothing for the low sun to
+ * set alight — a clear sky gives only a thin band of afterglow, never a 大烧.
+ * A single linear sum can only express one of those directions, which is why
+ * the overall score scored *below* chance (0.456) on blaze.
+ *
+ * This term is added because total cloud is the one place the two labels do
+ * not have to fight. On presence it is nearly signal-free (AUC 0.464, |dev|
+ * 0.036 — the weakest cloud feature there), while on blaze intensity it is the
+ * single most robust feature measured: AUC 0.650, 95% CI [0.509, 0.790], the
+ * only one whose interval clears 0.5, with 0% missing data in both classes.
+ * Blazing skies averaged 62.8% total cloud against 39.2% for dull ones.
+ *
+ * Hence the peak sits high (50-85%) rather than mid-range, and the weight is
+ * deliberately modest at 10: 61 samples with a CI lower bound of 0.509 earns a
+ * nudge, not a pillar. Overcast (>95%) is pulled back down — at that point the
+ * sun is sealed off and cannot light anything.
+ */
+function scoreTotalCloud(totalCover) {
+  const c = Number(totalCover);
+  if (!Number.isFinite(c)) return 0;       // unknown — stay neutral, never 0-as-value
+  if (c < 20) return 0;                    // bare sky: nothing to catch the light
+  if (c < 50) return Math.round(lerp(c, 20, 50, 0, 10));
+  if (c <= 85) return 10;                  // measured sweet spot
+  if (c <= 95) return Math.round(lerp(c, 85, 95, 10, 4));
+  return 2;                                // sealed overcast
+}
+
 function analyzeGlowSample({
   cloudCoverMid,
   cloudCoverHigh,
   cloudCoverLow,
+  cloudCoverTotal,
   humidity,
   visibility,
   precipitationProbability,
@@ -2454,6 +2527,7 @@ function analyzeGlowSample({
 }) {
   const midScore = scoreMidCloud(cloudCoverMid);
   const highScore = scoreHighCloud(cloudCoverHigh);
+  const totalScore = scoreTotalCloud(cloudCoverTotal);
   const lowPenalty = penaltyLowCloud(cloudCoverLow);
   const humidityScore = scoreHumidityForGlow(humidity);
   const visScore = scoreVisibilityForGlow(visibility);
@@ -2464,7 +2538,7 @@ function analyzeGlowSample({
   const penalty = precipPenalty(precipitationProbability, precipitationAmount);
   const aerosolScore = aerosol ? scoreAerosolForGlow(aerosol) : 0;
 
-  const rawScore = midScore + highScore + humidityScore + visScore + timeScore + aerosolScore - lowPenalty - penalty;
+  const rawScore = midScore + highScore + totalScore + humidityScore + visScore + timeScore + aerosolScore - lowPenalty - penalty;
   const score = clamp(rawScore, 0, 100);
 
   let level, label;
@@ -2488,6 +2562,7 @@ function analyzeGlowSample({
     timeLabel: isEvening ? '日落' : '日出',
     midScore,
     highScore,
+    totalScore,
     lowPenalty,
     humidityScore,
     visScore,
@@ -2565,6 +2640,10 @@ function analyzeDayGlow(hourly, start, sunriseTime, sunsetTime, airQuality) {
   const midCovers = (hourly.cloud_cover_mid ?? []).slice(start, start + 24).map(v => Number(v ?? 0));
   const highCovers = (hourly.cloud_cover_high ?? []).slice(start, start + 24).map(v => Number(v ?? 0));
   const lowCovers = (hourly.cloud_cover_low ?? hourly.cloudcover_low ?? []).slice(start, start + 24).map(v => Number(v ?? 0));
+  // 缺失保持 null，不要 ?? 0。总云量的 0 是"晴空无云"这个实打实的一端，
+  // 把缺失塞成 0 等于谎报晴空。scoreTotalCloud 对 null 返回中性 0 分。
+  const totalCovers = (hourly.cloud_cover ?? hourly.cloudcover ?? []).slice(start, start + 24)
+    .map((v) => (v == null || v === '' ? null : Number(v)));
   const humidities = hourly.relative_humidity_2m.slice(start, start + 24).map(v => Number(v ?? 0));
   const visibilities = (hourly.visibility ?? []).slice(start, start + 24).map(v => Number(v ?? 0));
   const precipProbs = (hourly.precipitation_probability ?? []).slice(start, start + 24).map(v => Number(v ?? 0));
@@ -2576,6 +2655,7 @@ function analyzeDayGlow(hourly, start, sunriseTime, sunsetTime, airQuality) {
     cloudCoverMid: midCovers[i],
     cloudCoverHigh: highCovers[i],
     cloudCoverLow: lowCovers[i],
+    cloudCoverTotal: totalCovers[i],
     humidity: humidities[i],
     visibility: visibilities[i],
     precipitationProbability: precipProbs[i],
@@ -2649,6 +2729,7 @@ module.exports = {
   // 导出云层判据本身，好让"哪一层云是光幕"这个结论被回归测试锁住。
   scoreMidCloud,
   scoreHighCloud,
+  scoreTotalCloud,
 };
 
   _cache['sunset'] = module.exports;

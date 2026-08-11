@@ -100,3 +100,5 @@ build-apk.log
 data/metar-sweep.json
 
 .glow-audit-cache.json
+
+.glow-image-cache.json
