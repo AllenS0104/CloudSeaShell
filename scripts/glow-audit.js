@@ -56,7 +56,7 @@ async function getJSON(url, tries = 4) {
 
 async function fetchDay(lat, lon, date) {
   const key = `${date}_${lat}_${lon}`;
-  if (cache[key] !== undefined) return cache[key];
+  if (cache[key]) return cache[key];
   const q = `latitude=${lat}&longitude=${lon}&start_date=${date}&end_date=${date}&timezone=auto`;
   let payload = null;
   try {
@@ -66,6 +66,22 @@ async function fetchDay(lat, lon, date) {
     payload = { hourly: w.hourly, sunrise: w.daily?.sunrise?.[0] || null, sunset: w.daily?.sunset?.[0] || null };
   } catch {
     payload = null;
+  }
+  // historical-forecast 只覆盖近几年，而 Commons 上的晚霞照片大量是
+  // 2011-2016 年的老片。首轮 255 条里有 115 条因此取不到数据，白白丢掉。
+  // ERA5 archive 覆盖 1940 年至今，且已确认 cloud_cover_mid/high 可用
+  // （不同于压力层湿度，那个在 archive 里全是 null）。
+  if (!payload?.hourly?.time) {
+    try {
+      const w = await getJSON(
+        `https://archive-api.open-meteo.com/v1/archive?${q}&hourly=${HOURLY}&daily=sunrise,sunset`,
+      );
+      if (w?.hourly?.time) {
+        payload = { hourly: w.hourly, sunrise: w.daily?.sunrise?.[0] || null, sunset: w.daily?.sunset?.[0] || null };
+      }
+    } catch {
+      // 两个源都拿不到就认了，样本丢弃好过用错数据
+    }
   }
   cache[key] = payload;
   cacheDirty = true;
@@ -109,7 +125,35 @@ async function scoreOne(obs) {
   const r = analyzeDayGlow(day.hourly, 0, day.sunrise, day.sunset, null);
   const best = r?.bestHour;
   if (!best || !Number.isFinite(best.score)) return null;
-  return best.score;
+
+  // 同时抓出日落时刻的原始气象量，用来做单变量诊断：
+  // 光知道总分不行，得看清是哪个判据没信号。
+  const feats = {};
+  if (day.sunset) {
+    const target = new Date(day.sunset).getTime();
+    let bi = -1;
+    let bd = Infinity;
+    day.hourly.time.forEach((t, i) => {
+      const d = Math.abs(new Date(t).getTime() - target);
+      if (d < bd) { bd = d; bi = i; }
+    });
+    if (bi >= 0) {
+      const g = (k) => {
+        const v = Number(day.hourly[k]?.[bi]);
+        return Number.isFinite(v) ? v : null;
+      };
+      feats.cloudMid = g('cloud_cover_mid');
+      feats.cloudHigh = g('cloud_cover_high');
+      feats.cloudLow = g('cloud_cover_low');
+      feats.cloudTotal = g('cloud_cover');
+      feats.humidity = g('relative_humidity_2m');
+      feats.visibility = g('visibility');
+      feats.pressure = g('pressure_msl');
+      feats.precip = g('precipitation');
+      feats.wind = g('wind_speed_10m');
+    }
+  }
+  return { score: best.score, feats };
 }
 
 async function main() {
@@ -130,11 +174,11 @@ async function main() {
 
   let done = 0;
   for (const item of all) {
-    const score = await scoreOne(item.o);
+    const got = await scoreOne(item.o);
     done += 1;
     if (done % 25 === 0) { saveCache(); process.stdout.write(`  取数 ${done}/${all.length}\r`); }
-    if (score == null) continue;
-    samples.push({ score, label: item.label, obs: item.o });
+    if (got == null) continue;
+    samples.push({ score: got.score, feats: got.feats, label: item.label, obs: item.o });
   }
   saveCache();
   console.log(`\n成功取到天气的样本 ${samples.length} 条 `
@@ -160,6 +204,42 @@ async function main() {
   const mean = (a) => a.reduce((x, y) => x + y, 0) / (a.length || 1);
   console.log(`\n正样本均分 ${mean(posScores).toFixed(1)}  负样本均分 ${mean(negScores).toFixed(1)}  `
     + `落差 ${(mean(posScores) - mean(negScores)).toFixed(1)} 分`);
+
+  // 单变量诊断：总分没信号时，必须看清是哪个判据的问题，
+  // 否则只会陷入盲目调权重。AUC 离 0.5 越远信号越强（<0.5 表示方向为负）。
+  console.log('\n▌单变量诊断（日落时刻的原始气象量 → 是否出现晚霞）');
+  console.log('特征            AUC     |偏离|  正样本均值   负样本均值');
+  const keys = ['cloudMid', 'cloudHigh', 'cloudLow', 'cloudTotal',
+    'humidity', 'visibility', 'pressure', 'precip', 'wind'];
+  const rows = [];
+  for (const k of keys) {
+    const sub = samples
+      .filter((s) => s.feats && s.feats[k] != null)
+      .map((s) => ({ score: s.feats[k], label: s.label }));
+    if (sub.length < 30) continue;
+    const a = rocAuc(sub);
+    if (a == null) continue;
+    const pm = mean(sub.filter((s) => s.label === 1).map((s) => s.score));
+    const nm = mean(sub.filter((s) => s.label === 0).map((s) => s.score));
+    rows.push({ k, a, pm, nm });
+  }
+  rows.sort((x, y) => Math.abs(y.a - 0.5) - Math.abs(x.a - 0.5));
+  for (const r of rows) {
+    console.log(`${r.k.padEnd(14)} ${r.a.toFixed(3)}   ${Math.abs(r.a - 0.5).toFixed(3)}   `
+      + `${r.pm.toFixed(1).padStart(9)}  ${r.nm.toFixed(1).padStart(11)}`);
+  }
+
+  // 导出特征表，用来测"这批标签的信息上界"：如果连逻辑回归都拉不高 AUC，
+  // 那问题在标签而不在评分权重，调参只会过拟合。这是 METAR 那次的教训。
+  if (process.argv.includes('--dump')) {
+    const out = path.join(__dirname, '..', 'data', 'glow-features.csv');
+    const header = ['label', 'score', ...keys].join(',');
+    const lines = samples
+      .filter((s) => s.feats && keys.every((k) => s.feats[k] != null))
+      .map((s) => [s.label, s.score, ...keys.map((k) => s.feats[k])].join(','));
+    fs.writeFileSync(out, `${header}\n${lines.join('\n')}\n`);
+    console.log(`\n已导出 ${lines.length} 行 → data/glow-features.csv`);
+  }
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

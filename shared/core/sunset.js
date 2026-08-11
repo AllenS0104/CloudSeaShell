@@ -7,9 +7,14 @@
  * that illuminates mid/high-level thin clouds like a screen.
  *
  * Key factors (different from cloud-sea):
- * - Mid-level clouds (3-8km): the primary "screen" for glow
- * - High-level clouds (>8km): secondary screen, creates pink/purple tones
- * - Low clouds (<3km): BLOCKS the glow if too thick
+ * - High-level clouds (>8km): the primary "screen" for glow. Best 30-90%;
+ *   >=90% seals the sky and is worse than clear. Established by a 255-sample
+ *   audit (scripts/glow-audit.js) — see scoreHighCloud for the numbers.
+ * - Mid-level clouds (3-8km): mildly NEGATIVE. The original design treated
+ *   these as the main screen, but the data disagreed: they signal a frontal
+ *   deck. Same conclusion the cloud-sea model reached independently.
+ * - Low clouds (<3km): BLOCKS the glow if too thick — the strongest single
+ *   signal measured (AUC 0.422)
  * - Humidity: moderate is best (40-75%), too high = overcast
  * - Clean air / good visibility helps color intensity
  */
@@ -20,26 +25,66 @@ const { clamp, lerp } = require('./math-utils');
  * Score mid-level cloud cover (3-8km) — the primary glow "screen"
  * Best: 30-70%, too little = no canvas, too much = overcast
  */
+/**
+ * Score mid-level cloud cover (3-8km).
+ *
+ * Originally this was the model's single largest positive term (+28, treating
+ * 30-70% as the ideal "screen"). A 255-sample audit (scripts/glow-audit.js)
+ * rejected that: mid-cloud correlates *negatively* with observed glow
+ * (AUC 0.457; mean 17.5% on glow days vs 23.8% on control days), and the
+ * supposed sweet spot 30-70% had the *lowest* occurrence rate of any band
+ * (25.0%). The logistic fit agrees (coefficient -0.222).
+ *
+ * This matches the cloud-sea side, where mid-cloud also turned out to be a
+ * negative: it signals a synoptic frontal deck, i.e. an overcast sky. It is
+ * the high, thin cloud that acts as the screen, not the mid deck.
+ *
+ * So the term is demoted from the largest bonus to a small one, with thick
+ * mid-cloud now costing points. Kept small deliberately — the measured
+ * signal is weak and non-monotonic, so a large weight either way would be
+ * fitting noise.
+ */
 function scoreMidCloud(midCover) {
-  const v = Number(midCover ?? 0);
-  if (v >= 30 && v <= 70) return 28;
-  if (v >= 20 && v < 30) return Math.round(lerp(v, 20, 30, 10, 28));
-  if (v > 70 && v <= 90) return Math.round(lerp(v, 70, 90, 28, 8));
-  if (v > 90) return 4;
-  if (v >= 10) return Math.round(lerp(v, 10, 20, 4, 10));
-  return 0;
+  // 缺数据必须是中性 0，不能落进"<=30% 给奖励"那一档。
+  // `Number(x ?? 0)` 会把 null 变成 0，等于把"没有数据"当成"中空通透"
+  // 白送 8 分，这是不该有的乐观假设。
+  if (midCover === null || midCover === undefined) return 0;
+  const v = Number(midCover);
+  if (!Number.isFinite(v) || v < 0) return 0;
+  if (v <= 30) return 8;
+  if (v <= 70) return Math.round(lerp(v, 30, 70, 8, 0));
+  return Math.round(lerp(Math.min(v, 100), 70, 100, 0, -6));
 }
 
 /**
- * Score high-level cloud cover (>8km) — secondary screen for pink/purple
+ * Score high-level cloud cover (>8km) — the actual glow screen.
+ *
+ * The audit found the relationship is an inverted U that the old curve had
+ * mispositioned. Measured occurrence rates by band:
+ *   0-10%   32.4%      30-60%  47.1%
+ *   10-30%  27.3%      60-90%  60.0%   <- peak
+ *                      >=90%   24.1%   <- worse than clear sky
+ *
+ * The old curve peaked at 20-60% and was already *decaying* through 60-90%,
+ * i.e. it penalised the best band. Overcast high cloud (>=90%) is genuinely
+ * bad — it seals the sky rather than catching light.
+ *
+ * Robustness: this shape is non-linear, so a linear AUC understates it
+ * (0.510). Adding the binned form lifted cross-validated AUC 0.541 -> 0.599,
+ * past the existing scorer's 0.566. Bootstrap on the 30-90% vs >=90% gap:
+ * +30.0pp, 95% CI [+9.1, +50.7], positive in 99.7% of resamples.
+ *
+ * This is also the one place our findings line up with SunsetWx, which
+ * weights high cloud/high-level moisture above all else.
  */
 function scoreHighCloud(highCover) {
-  const v = Number(highCover ?? 0);
-  if (v >= 20 && v <= 60) return 18;
-  if (v >= 10 && v < 20) return Math.round(lerp(v, 10, 20, 6, 18));
-  if (v > 60 && v <= 85) return Math.round(lerp(v, 60, 85, 18, 6));
-  if (v > 85) return 3;
-  return Math.round(lerp(v, 0, 10, 0, 6));
+  if (highCover === null || highCover === undefined) return 0;
+  const v = Number(highCover);
+  if (!Number.isFinite(v) || v < 0) return 0;
+  if (v >= 30 && v <= 90) return 28;
+  if (v >= 10 && v < 30) return Math.round(lerp(v, 10, 30, 8, 28));
+  if (v > 90) return Math.round(lerp(Math.min(v, 100), 90, 100, 28, 2));
+  return Math.round(lerp(v, 0, 10, 0, 8));
 }
 
 /**
@@ -250,16 +295,20 @@ function buildGlowReasons({ cloudCoverMid, cloudCoverHigh, cloudCoverLow, humidi
   const highV = Number(cloudCoverHigh ?? 0);
   const lowV = Number(cloudCoverLow ?? 0);
 
-  if (midV >= 30 && midV <= 70) {
-    reasons.push(`中层云量 ${Math.round(midV)}%，薄云充当"光幕"，最利于霞光显色。`);
-  } else if (midV < 20) {
-    reasons.push(`中层云量仅 ${Math.round(midV)}%，缺少反射面，霞光可能不够壮观。`);
+  // 文案随判据一起修正：实测表明充当"光幕"的是高层薄云，不是中层云。
+  // 中层云 30-70% 这一档的晚霞出现率反而是各档里最低的（25.0%）。
+  if (highV >= 30 && highV <= 90) {
+    reasons.push(`高层云量 ${Math.round(highV)}%，高空薄云充当"光幕"，最利于霞光显色。`);
+  } else if (highV > 90) {
+    reasons.push(`高层云量 ${Math.round(highV)}%，高空被云封死，霞光难以透出。`);
   } else {
-    reasons.push(`中层云量 ${Math.round(midV)}%，云层偏厚可能影响色彩透射。`);
+    reasons.push(`高层云量仅 ${Math.round(highV)}%，缺少高空反射面，霞光可能不够壮观。`);
   }
 
-  if (highV >= 20 && highV <= 60) {
-    reasons.push(`高层云量 ${Math.round(highV)}%，有利于呈现粉紫色调。`);
+  if (midV >= 70) {
+    reasons.push(`中层云量 ${Math.round(midV)}%，多为系统性云系，会挡住霞光。`);
+  } else if (midV <= 30) {
+    reasons.push(`中层云量 ${Math.round(midV)}%，中空通透，利于霞光照到高空云上。`);
   }
 
   if (aerosol && aerosolScore > 4) {
@@ -384,4 +433,7 @@ module.exports = {
   analyzeGlowSample,
   analyzeDayGlow,
   scoreAerosolForGlow,
+  // 导出云层判据本身，好让"哪一层云是光幕"这个结论被回归测试锁住。
+  scoreMidCloud,
+  scoreHighCloud,
 };

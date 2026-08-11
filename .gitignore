@@ -98,3 +98,5 @@ build-apk.log
 .metar-stations.json
 .metar-sweep-cache.json
 data/metar-sweep.json
+
+.glow-audit-cache.json
