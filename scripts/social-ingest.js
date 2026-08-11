@@ -403,12 +403,24 @@ async function commonsGeoSearch(lat, lon, radius, limit) {
  * 用多语种词条是因为 Commons 的贡献者以欧洲和日本居多，只搜英文会漏掉大半。
  */
 async function sweepCommons({ limit, kind }) {
-  const queries = [
+  // 云海和晚霞是两套完全不同的检索词。用云海词表去搜晚霞会几乎全军覆没，
+  // 因为 detectKind 靠关键词判类，检索词决定了召回池的成分。
+  const CLOUD_SEA_QUERIES = [
     'sea of clouds', 'cloud inversion', 'above the clouds mountain',
     'undercast mountain', 'Nebelmeer', 'mer de nuages', 'mar de nubes',
     '雲海', 'cloud sea sunrise', 'temperature inversion valley fog',
     'fog sea mountain summit', 'alpenglow above clouds',
   ];
+  // 同样按多语种铺开（Commons 贡献者以欧洲/日本居多）。
+  // 晚霞比云海更依赖拍摄时刻，所以偏重能带出具体时间的表述。
+  const GLOW_QUERIES = [
+    'sunset glow', 'afterglow sky', 'red sky sunset clouds',
+    'burning sky sunset', 'alpenglow', 'sunset clouds mountain',
+    'Abendrot', 'coucher de soleil nuages', 'atardecer nubes',
+    '夕焼け', '夕焼け雲', '火烧云', '晚霞',
+    'golden hour clouds', 'crepuscular sunset sky',
+  ];
+  const queries = kind === 'glow' ? GLOW_QUERIES : CLOUD_SEA_QUERIES;
   const seenTitles = new Set();
   const all = [];
 

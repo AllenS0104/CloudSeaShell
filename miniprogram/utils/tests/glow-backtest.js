@@ -98,7 +98,10 @@ async function fetchObservationData(obs, cache) {
   const key = `${obs.date}_${obs.lat}_${obs.lon}`;
   if (cache[key]) return cache[key];
 
-  const q = `latitude=${obs.lat}&longitude=${obs.lon}&start_date=${obs.date}&end_date=${obs.date}&timezone=Asia/Shanghai`;
+  // timezone=auto：返回机位当地时间。晚霞评分有 20 分直接来自"相对日落时刻"，
+  // 而样本大量分布在境外（夏威夷、欧洲、新西兰）。硬编码 Asia/Shanghai 会让
+  // sunset 时刻整体错位十几个小时，时间窗得分全废。
+  const q = `latitude=${obs.lat}&longitude=${obs.lon}&start_date=${obs.date}&end_date=${obs.date}&timezone=auto`;
   const weather = await getJSON(
     `https://historical-forecast-api.open-meteo.com/v1/forecast?${q}&hourly=${HOURLY}&daily=sunrise,sunset`
   );

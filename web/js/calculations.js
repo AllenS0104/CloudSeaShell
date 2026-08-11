@@ -16,6 +16,7 @@ const {
   scoreWind,
   scoreCloudCover,
   scoreLowCloudCover,
+  midCloudPenalty,
   scoreDewPointSpread,
   scorePressure,
   precipitationPenalty,
@@ -57,6 +58,7 @@ function buildReasons({
   windSpeed,
   cloudCover,
   lowCloudCover,
+  midCloudCover,
   dewPointGap,
   pressureMsl,
   precipitationProbability,
@@ -69,6 +71,15 @@ function buildReasons({
   capePenalty,
 }) {
   const reasons = [];
+
+  // 白墙预警放在最前：reasons 最终只保留 5 条，而"劝退"信息对用户的价值
+  // 高于任何一条锦上添花的正面理由。若排在后面会被正面理由挤掉。
+  if (midCloudCover >= 50) {
+    reasons.push(`中层云量 ${Math.round(midCloudCover)}%偏高，多为系统性云系而非局地雾海，`
+      + '更可能是身处云雾中的「白墙」而不是俯瞰脚下云海，实拍效果通常打折。');
+  } else if (midCloudCover >= 30) {
+    reasons.push(`中层云量 ${Math.round(midCloudCover)}%，存在被云雾笼罩而非俯瞰云海的可能。`);
+  }
 
   if (inversionDetected) {
     if (inversionLayer) {
@@ -195,6 +206,7 @@ function analyzeCloudSeaSample({
   visibility,
   cloudCover,
   lowCloudCover,
+  midCloudCover,
   windSpeed,
   dewPoint,
   pressureMsl,
@@ -216,6 +228,7 @@ function analyzeCloudSeaSample({
   const safeVisibility = Number(visibility ?? 0);
   const safeCloudCover = Number(cloudCover ?? 0);
   const safeLowCloudCover = Number(lowCloudCover ?? 0);
+  const safeMidCloudCover = Number(midCloudCover ?? 0);
   const safeWindSpeed = Number(windSpeed ?? 0);
   const safeDewPoint = Number(dewPoint ?? 0);
   const safePressureMsl = Number(pressureMsl ?? 0);
@@ -228,6 +241,8 @@ function analyzeCloudSeaSample({
   const gapToElevation = elevation - cloudBase;
   const timeScore = scoreTimeWindow(timeString, sunriseTime);
   const penalty = precipitationPenalty(safePrecipitationProbability, safePrecipitationAmount);
+  // 中层云惩罚：把「站在云上」与「埋在云里」分开，详见 scoring.js
+  const midPenalty = midCloudPenalty(safeMidCloudCover);
 
   const baseScore = clamp(
     scoreAvailableComponents([
@@ -245,8 +260,7 @@ function analyzeCloudSeaSample({
     0,
     100,
   );
-  const compositePenalty = compositeReliabilityPenalty({
-    humidity: safeHumidity,
+  const compositePenalty = compositeReliabilityPenalty({    humidity: safeHumidity,
     windSpeed: safeWindSpeed,
     cloudCover: safeCloudCover,
     lowCloudCover: safeLowCloudCover,
@@ -254,7 +268,7 @@ function analyzeCloudSeaSample({
     dewPointGap,
     precipitationProbability: safePrecipitationProbability,
   });
-  const score = clamp(baseScore - penalty - compositePenalty - Number(capePenalty || 0), 0, 100);
+  const score = clamp(baseScore - penalty - compositePenalty - midPenalty - Number(capePenalty || 0), 0, 100);
   const confidence = scoreToConfidence(score);
   const suggestion = score >= CLOUD_SEA_GO;
 
@@ -264,6 +278,7 @@ function analyzeCloudSeaSample({
     visibility: safeVisibility,
     cloudCover: safeCloudCover,
     lowCloudCover: safeLowCloudCover,
+    midCloudCover: safeMidCloudCover,
     windSpeed: safeWindSpeed,
     dewPoint: safeDewPoint,
     dewPointGap,
@@ -281,6 +296,7 @@ function analyzeCloudSeaSample({
     baseScore,
     penalty,
     compositePenalty,
+    midPenalty,
     score,
     confidenceLabel: confidence.label,
     confidenceLevel: confidence.level,
@@ -296,6 +312,7 @@ function analyzeCloudSeaSample({
       windSpeed: safeWindSpeed,
       cloudCover: safeCloudCover,
       lowCloudCover: safeLowCloudCover,
+      midCloudCover: safeMidCloudCover,
       dewPointGap,
       pressureMsl: safePressureMsl,
       precipitationProbability: safePrecipitationProbability,
@@ -345,6 +362,11 @@ function getHourlyLowCloudCover(hourly, start, count = 24) {
   return values.slice(start, start + count).map((value) => Number(value ?? 0));
 }
 
+function getHourlyMidCloudCover(hourly, start, count = 24) {
+  const values = hourly?.cloud_cover_mid ?? hourly?.cloudcover_mid ?? [];
+  return values.slice(start, start + count).map((value) => Number(value ?? 0));
+}
+
 function minOrZero(values) {
   return values.length ? Math.min(...values) : 0;
 }
@@ -363,7 +385,7 @@ function fingerprintHourly(hourly, start) {
   if (!hourly) return 'none';
   const fields = [
     'temperature_2m', 'relative_humidity_2m', 'dew_point_2m', 'pressure_msl',
-    'visibility', 'cloud_cover', 'cloud_cover_low', 'wind_speed_10m',
+    'visibility', 'cloud_cover', 'cloud_cover_low', 'cloud_cover_mid', 'wind_speed_10m',
     'precipitation', 'precipitation_probability', 'cape',
     'temperature_925hPa', 'temperature_850hPa', 'temperature_700hPa',
   ];
@@ -410,6 +432,7 @@ function analyzeDayCloudSea(hourly, start, elevation, sunriseTimeFromAPI) {
   const visibilities = (hourly.visibility ?? []).slice(start, start + 24).map((value) => Number(value ?? 0));
   const cloudCover = getHourlyCloudCover(hourly, start, 24);
   const lowCloudCover = getHourlyLowCloudCover(hourly, start, 24);
+  const midCloudCover = getHourlyMidCloudCover(hourly, start, 24);
   const windSpeeds = (hourly.wind_speed_10m ?? []).slice(start, start + 24).map((value) => Number(value ?? 0));
   const precipitationProbabilities = (hourly.precipitation_probability ?? []).slice(start, start + 24).map((value) => Number(value ?? 0));
   const precipitationAmounts = (hourly.precipitation ?? []).slice(start, start + 24).map((value) => Number(value ?? 0));
@@ -456,6 +479,7 @@ function analyzeDayCloudSea(hourly, start, elevation, sunriseTimeFromAPI) {
       visibility: visibilities[index],
       cloudCover: cloudCover[index],
       lowCloudCover: lowCloudCover[index],
+      midCloudCover: midCloudCover[index],
       windSpeed: windSpeeds[index],
       dewPoint: dewPoints[index],
       pressureMsl: pressureMsl[index],

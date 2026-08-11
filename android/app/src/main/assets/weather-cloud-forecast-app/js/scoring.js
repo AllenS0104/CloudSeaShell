@@ -46,6 +46,33 @@ function scoreLowCloudCover(lowCloudCover) {
   return 0;
 }
 
+/**
+ * 中层云惩罚 —— 区分「云海」与「云雾/白墙」。
+ *
+ * 低云量、湿度、露点差这些判据对两种现象**完全一样**：
+ * 站在云上俯瞰云海，和整个人埋在云雾里看不见五米，
+ * 地面读数都是高湿、饱和、低云满格。所以此前白墙必然拿高分，
+ * 是假阳性的主要来源。
+ *
+ * 中层云是把两者分开的信号：局地辐射雾（真云海）几乎不伴随中层云，
+ * 而中层云意味着系统性的锋面云系——那是阴天，不是云海。
+ *
+ * 682 样本定标（data/features.csv）：
+ *   中层云  0-10%  → 成功率 40.3%
+ *          25-50% → 22.0%
+ *          75-90% →  7.7%
+ * 且**不是总云量的影子**（相关系数仅 0.51）：控制总云量后仍有独立信号，
+ * 总云量 50-85% 时，中层云 <40% 成功率 47.1%、≥40% 仅 14.3%（落差 32.8pp）。
+ *
+ * 30% 以下不罚：少量中层云不影响低层雾海的形成。
+ */
+function midCloudPenalty(midCloudCover) {
+  const v = Number(midCloudCover ?? 0);
+  if (!Number.isFinite(v) || v <= 30) return 0;
+  if (v >= 75) return 12;
+  return Math.round(lerp(v, 30, 75, 0, 12));
+}
+
 function scoreDewPointSpread(temperature, dewPoint) {
   const spread = Number(temperature ?? 0) - Number(dewPoint ?? 0);
   if (spread <= 1.5) return 12;
@@ -266,6 +293,7 @@ module.exports = {
   scoreWind,
   scoreCloudCover,
   scoreLowCloudCover,
+  midCloudPenalty,
   scoreDewPointSpread,
   scorePressure,
   precipitationPenalty,
