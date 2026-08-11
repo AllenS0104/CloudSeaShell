@@ -26,7 +26,9 @@
     "ingest:social": "node scripts/social-ingest.js",
     "ingest:commons": "node scripts/social-ingest.js --source commons-sweep --out data/observations-commons.json",
     "audit:global": "node miniprogram/utils/tests/prediction-audit.js --controls=2 --commons",
-    "lab:features": "node scripts/feature-lab.js"
+    "lab:features": "node scripts/feature-lab.js",
+    "metar:check": "node scripts/metar-truth.js --check",
+    "metar:sweep": "node scripts/metar-truth.js --sweep"
   },
   "dependencies": {
     "react": "19.1.0",

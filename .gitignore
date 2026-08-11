@@ -91,3 +91,10 @@ build-apk.log
 .prediction-audit-cache.json
 
 .feature-lab-cache.json
+
+# METAR 探索缓存（可由 scripts/metar-truth.js 重新生成）
+.metar-cache.json
+.metar-eval-cache.json
+.metar-stations.json
+.metar-sweep-cache.json
+data/metar-sweep.json
