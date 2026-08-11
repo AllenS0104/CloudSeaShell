@@ -1061,6 +1061,7 @@ function analyzeCurrentCloudSea(current, elevation) {
     visibility: Number(current?.visibility ?? 0),
     cloudCover: getCurrentCloudCover(current),
     lowCloudCover: getCurrentLowCloudCover(current),
+    midCloudCover: getCurrentMidCloudCover(current),
     windSpeed: Number(current?.wind_speed_10m ?? 0),
     dewPoint: Number(current?.dew_point_2m ?? 0),
     pressureMsl: Number(current?.pressure_msl ?? 0),
@@ -1077,6 +1078,11 @@ function getCurrentCloudCover(current) {
 
 function getCurrentLowCloudCover(current) {
   return Number(current?.cloud_cover_low ?? current?.cloudcover_low ?? 0);
+}
+
+function getCurrentMidCloudCover(current) {
+  // 兼容 Open-Meteo 新旧两种字段命名，与低层云的处理保持一致。
+  return Number(current?.cloud_cover_mid ?? current?.cloudcover_mid ?? 0);
 }
 
 function getHourlyCloudCover(hourly, start, count = 24) {
