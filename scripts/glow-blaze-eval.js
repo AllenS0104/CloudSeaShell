@@ -123,8 +123,16 @@ function spearman(a, b) {
   return num / Math.sqrt(da * db);
 }
 
-function nearestIdx(times, target) {
-  const t = new Date(target).getTime();
+// 分类地名地理编码只能给到城市级坐标，误差可达几十公里，取到的天气未必是
+// 拍摄地的天气。实测这批样本在两个标签上都比 EXIF 样本差，且都低于随机：
+//   「有无」标签  exif 0.563 / category 0.472
+//   「大烧」标签  exif 0.477 / category 0.361
+// 方向一致，说明它们携带的是噪声而不是信号。默认排除；--include-lowgeo
+// 可以把它们放回来并打印分组对照，用来复核这个判断。
+const INCLUDE_LOWGEO = process.argv.includes('--include-lowgeo');
+const LOW_GEO = 'category-geocode';
+
+function nearestIdx(times, target) {  const t = new Date(target).getTime();
   let bi = -1;
   let bd = Infinity;
   times.forEach((x, i) => {
@@ -136,7 +144,11 @@ function nearestIdx(times, target) {
 
 async function main() {
   const file = path.join(__dirname, '..', 'data', 'glow-intensity.json');
-  const recs = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const allRecs = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const recs = INCLUDE_LOWGEO ? allRecs : allRecs.filter((r) => r.geoSource !== LOW_GEO);
+  if (recs.length !== allRecs.length) {
+    console.log(`已排除 ${allRecs.length - recs.length} 条城市级坐标样本（--include-lowgeo 可放回）`);
+  }
 
   const sorted = [...recs].sort((a, b) => a.fiery - b.fiery);
   const q = (p) => sorted[Math.floor((sorted.length - 1) * p)].fiery;
@@ -220,6 +232,20 @@ async function main() {
   const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
   console.log(`大烧组均分 ${mean(rows.filter((r) => r.label === 1).map((r) => r.v)).toFixed(1)}   `
     + `寡淡组均分 ${mean(rows.filter((r) => r.label === 0).map((r) => r.v)).toFixed(1)}`);
+
+  // 按坐标来源分组。分类地名地理编码给的是城市级坐标，误差可达几十公里，
+  // 取到的天气未必是拍摄地的天气；实测两个标签上它都比 EXIF 样本差且低于
+  // 随机，所以默认已被排除，这一栏只在 --include-lowgeo 时打印。
+  if (INCLUDE_LOWGEO) {
+    console.log('\n▌按坐标来源分组');
+    console.log('来源                大烧  寡淡   AUC');
+    for (const src of ['exif-or-geosearch', LOW_GEO]) {
+      const sub = rows.filter((r) => r.rec.geoSource === src);
+      const a = rocAuc(sub);
+      console.log(`${src.padEnd(18)} ${String(sub.filter((r) => r.label === 1).length).padStart(4)}  `
+        + `${String(sub.filter((r) => r.label === 0).length).padStart(4)}   ${a == null ? 'n/a' : a.toFixed(3)}`);
+    }
+  }
 
   console.log('\n▌单变量诊断（日落时刻气象量 → 是否大烧）');
   console.log('特征            AUC     |偏离|   大烧均值    寡淡均值   有效n  缺失率(大烧/寡淡)');

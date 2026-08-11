@@ -156,14 +156,31 @@ async function scoreOne(obs) {
   return { score: best.score, feats };
 }
 
+// 分类地名地理编码只能给到城市级坐标，误差可达几十公里，取到的天气未必是
+// 拍摄地的天气。实测这批样本在两个标签上都比 EXIF 样本差，且都低于随机：
+//   「有无」标签  exif 0.563 / category 0.472
+//   「大烧」标签  exif 0.477 / category 0.361
+// 方向一致，说明它们携带的是噪声而不是信号。样本量从 85 涨到 119 看着很美，
+// 但用它们做验收只会稀释真实效应。所以默认排除；加 --include-lowgeo
+// 可以把它们放回来并打印分组对照，用来复核这个判断。
+const INCLUDE_LOWGEO = process.argv.includes('--include-lowgeo');
+const LOW_GEO = 'category-geocode';
+
 async function main() {
   const file = path.join(__dirname, '..', 'data', 'observations-glow.json');
   const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
-  const positives = (Array.isArray(raw) ? raw : raw.observations || [])
+  const usable = (Array.isArray(raw) ? raw : raw.observations || [])
     .filter((o) => !o.rejected && o.observed && o.lat != null && o.date);
+  const positives = INCLUDE_LOWGEO ? usable : usable.filter((o) => o.geoSource !== LOW_GEO);
+  const dropped = usable.length - positives.length;
+  if (dropped) console.log(`已排除 ${dropped} 条城市级坐标样本（--include-lowgeo 可放回）`);
 
   const controlsPer = Number((process.argv.find((a) => a.startsWith('--controls=')) || '').split('=')[1] || 2);
   const controls = buildControlDays(positives, controlsPer);
+  // 控制日是按机位克隆出来的，本身不带坐标来源，这里补回去，
+  // 否则分组统计会把所有负样本都算成 exif。
+  const srcByLoc = new Map(positives.map((o) => [o.location, o.geoSource]));
+  for (const c of controls) c.geoSource = srcByLoc.get(c.location);
   console.log(`晚霞正样本 ${positives.length} 条，控制日负样本 ${controls.length} 条\n`);
 
   const samples = [];
@@ -227,6 +244,17 @@ async function main() {
   for (const r of rows) {
     console.log(`${r.k.padEnd(14)} ${r.a.toFixed(3)}   ${Math.abs(r.a - 0.5).toFixed(3)}   `
       + `${r.pm.toFixed(1).padStart(9)}  ${r.nm.toFixed(1).padStart(11)}`);
+  }
+
+  if (INCLUDE_LOWGEO) {
+    console.log('\n▌按坐标来源分组');
+    console.log('来源                 正   负   AUC');
+    for (const src of ['exif-or-geosearch', LOW_GEO]) {
+      const sub = samples.filter((s) => s.obs.geoSource === src);
+      const a = rocAuc(sub);
+      console.log(`${src.padEnd(18)} ${String(sub.filter((s) => s.label === 1).length).padStart(4)} `
+        + `${String(sub.filter((s) => s.label === 0).length).padStart(4)}   ${a == null ? 'n/a' : a.toFixed(3)}`);
+    }
   }
 
   // 导出特征表，用来测"这批标签的信息上界"：如果连逻辑回归都拉不高 AUC，

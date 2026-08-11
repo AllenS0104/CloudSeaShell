@@ -226,9 +226,9 @@ function commonsPageToObservation(page, opts = {}) {
   if (!kind) return { rejected: true, rejectReason: 'no-kind-keyword', title };
   if (opts.kind && kind !== opts.kind) return { rejected: true, rejectReason: 'kind-mismatch', title };
 
-  // 三个坐标来源，可靠性递减：geosearch 注入 > {{Location}} 模板 > EXIF GPS。
-  // 实测文本检索结果里 EXIF GPS 只有 8%，而 {{Location}} 模板同样稀疏，
-  // 所以真正能规模化的是 geosearch（结果按定义必带坐标）。
+  // 四个坐标来源，可靠性递减：geosearch 注入 > {{Location}} 模板 > EXIF GPS
+  // > 分类地名地理编码。最后一个只对晚霞开放（见 geoFromCategories 的说明），
+  // 因为云海是局地现象，坐标精度不能让步。
   const coord = page?.coordinates?.[0];
   const lat = parseCoord(page.__geoLat ?? coord?.lat ?? meta.GPSLatitude?.value);
   const lon = parseCoord(page.__geoLon ?? coord?.lon ?? meta.GPSLongitude?.value);
@@ -236,6 +236,14 @@ function commonsPageToObservation(page, opts = {}) {
 
   const { date, hour } = parseCommonsDate(meta.DateTimeOriginal?.value);
   if (!date) return { rejected: true, rejectReason: 'no-capture-date', title };
+  // Commons 上有大量历史画作，它们同样带 DateTimeOriginal（画作年份），
+  // 于是能一路混到这里。实测捞到过一幅 1896 年的 "Sunset Glow on Mt
+  // Tamalpais"，而且它的"地名"是从画家名解析出来的，坐标落在了两千公里外
+  // 的德州。月日为 00 是这类条目的共同特征，年份下限则兜住其余情况——
+  // 早于 1990 年的日期在任何一个再分析数据源里都取不到可用天气。
+  if (!/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(date) || date < '1990') {
+    return { rejected: true, rejectReason: 'implausible-date', title };
+  }
 
   // 机位表的高程是查证过的published值，优于 DEM（DEM 对陡峰系统性低估 100-420m）。
   // 但只有当照片确实落在该机位附近时才敢用，否则宁可回落到 DEM。
@@ -253,6 +261,10 @@ function commonsPageToObservation(page, opts = {}) {
     elevation: spot?.elevation ?? null,
     observed: true,
     confidence: hour != null ? 'high' : 'medium',
+    // 坐标来源存档：靠分类地名地理编码补出来的只有城市级精度，
+    // 下游若要做对精度敏感的分析（比如云海那种局地现象），据此剔除。
+    geoSource: page.__geoVia ? 'category-geocode' : 'exif-or-geosearch',
+    ...(page.__geoVia ? { geoVia: page.__geoVia, geoSpanDeg: page.__geoSpan } : {}),
     source: 'wikimedia-commons',
     url: info?.descriptionurl || `https://commons.wikimedia.org/wiki/${encodeURIComponent(title)}`,
     license: stripHtml(meta.LicenseShortName?.value) || 'see-commons',
@@ -365,11 +377,129 @@ function matchPlatform(url) {
 // ─────────────────────────── 采集器 ───────────────────────────
 
 const COMMONS_API = 'https://commons.wikimedia.org/w/api.php?action=query&format=json';
-const COMMONS_PROPS = '&prop=coordinates|imageinfo&iiprop=extmetadata|url'
+const COMMONS_PROPS = '&prop=coordinates|categories|imageinfo&cllimit=max&iiprop=extmetadata|url'
   + '&iiextmetadatafilter=DateTimeOriginal|GPSLatitude|GPSLongitude|ImageDescription|Categories|LicenseShortName';
 
+// ── 分类地名回落（仅晚霞启用） ──────────────────────────────
+//
+// 云海是局地现象，机位差几百米结果就不同，所以坐标必须精确，宁可丢样本。
+// 晚霞不是：它是天边几十公里尺度的现象，城市级精度完全够用。而 Commons
+// 文本检索里带 EXIF GPS 的只有 8%，光是 no-geo 一项就丢掉了 172 条晚霞样本，
+// 这正是「大烧」样本只剩 61 条、几乎所有结论 CI 都跨 0.5 的直接原因。
+//
+// 所以对晚霞额外允许第四个坐标来源：从分类名里取地名，再地理编码。
+// 关卡有三道，缺一不可：
+//   1. 拍摄日期仍然必须来自 EXIF，一点不放宽。这天然挡掉了油画（Commons 上
+//      有大量 1878 年的日落油画）和 NASA 图——探针里真的捞到过 MarsSunset.jpg。
+//   2. 维护类分类（许可证、Flickr 审核、Wiki Loves 活动等）全部剔除。
+//   3. 地理编码结果的 bbox 跨度必须够小。这是关键闸门：「2016 photographs of
+//      Canada」这类会解析成整个国家，对天气毫无意义，必须拒掉。
+const GEO_CACHE_FILE = path.join(__dirname, '..', '.geocode-cache.json');
+let geoCache = null;
+
+function loadGeoCache() {
+  if (geoCache) return geoCache;
+  try { geoCache = JSON.parse(fs.readFileSync(GEO_CACHE_FILE, 'utf8')); } catch { geoCache = {}; }
+  return geoCache;
+}
+
+const CAT_NOISE = /(CC-|GFDL|PD-|Licen[cs]e|Self-published|Media |Files |File:|Uploaded|Photographs by|Photos by|Images? (from|with|of|reviewed|missing)|Flickr|import-|Featured pictures?|Featured photographs?|Quality images|Valued images|missing SDC|Wiki Loves|Taken with|Pages with|Artworks|paintings|oil on canvas|Astronomical|Mars|NASA)/i;
+
+// 内容主题词。Commons 的分类大量是「拍的是什么」而不是「在哪拍的」，
+// 而 Nominatim 对任何字符串都会尽力返回点东西：实测 "Sunsets" 会匹配到
+// 一栋叫 Sunsets 的房子，"nebulae" 匹配到一条叫 Nebulae Way 的路，
+// "roses" 匹配到西班牙的 Roses 镇——最后这个连类型闸门都拦不住，
+// 因为它确实是个行政区，只是和玫瑰花毫无关系。所以必须在候选阶段就拦掉。
+const TOPIC_WORDS = /^(sun(sets?|rises?|light)|sky|skies|cloud(s|scapes?)?|nebulae?|stars?|moon|roses?|flowers?|gardens?|trees?|birds?|water|sea|ocean|dusk|dawn|twilight|afterglow|golden\s+\w+|red\s+\w+|evening|morning|night|weather|nature|landscapes?|panoramas?|silhouettes?|reflections?|colou?rs?\s+\w*)$/i;
+
+// 拍摄参数类分类。Commons 有大量「F-number f/11」「ISO speed rating 200」
+// 这样的 EXIF 分类，它们同样会被 Nominatim 硬凑出一个坐标——实测
+// "F-number f/11" 真的返回了一个 boundary 类结果，连类型闸门都骗过了。
+const EXIF_WORDS = /(f-number|f\/|iso\b|exposure|focal|shutter|aperture|lens|camera|megapixel|orientation|white balance|flash|metering|motion|panorama|HDR|monochrome|black and white)/i;
+
+/** Nominatim 里真正算「地方」的类别。挡掉 highway/building/amenity/man_made 这类 POI */
+const GEO_OK_CATEGORY = new Set(['boundary', 'place', 'natural', 'landuse']);
+
+/** 从分类名里挑最可能是地名的候选，具体的排前面 */
+function placeCandidates(categories) {
+  const names = (categories || [])
+    .map((c) => String(c.title || '').replace(/^Category:/, ''))
+    .filter((c) => c && !CAT_NOISE.test(c));
+  const out = [];
+  for (const c of names) {
+    // 「Sunsets of Molokaʻi」「Clouds at sunset in San Francisco」→ 取介词后的地名。
+    // 前面的 .* 必须贪婪，好让匹配落在**最后**一个介词上：否则
+    // "Clouds at sunset in San Francisco" 会停在第一个 at，捕获成
+    // "sunset in San Francisco"，地名就丢了。
+    const m = c.match(/^.*(?:\bin|\bof|\bat|\bnear)\s+(.{2,60})$/i);
+    if (m) out.push(m[1].trim());
+    // 「Guangzhou」「Berkeley Beach」这类分类名本身就是地名
+    else if (/^[A-Z\u00C0-\u024F\u4e00-\u9fff]/.test(c) && !/^\d/.test(c) && c.length <= 48) out.push(c);
+  }
+  // 年份前缀「2019 in Schuyler County, New York」也含地名，兜底捞一次
+  for (const c of names) {
+    const m = c.match(/^\d{4}\s+in\s+(.+)$/i);
+    if (m) out.push(m[1].trim());
+  }
+  return [...new Set(out)]
+    .map((s) => s.trim())
+    // 真地名在 Commons 分类里几乎总是大写字母或 CJK 开头。这一条通用规则
+    // 顺手挡掉了介词规则捞出来的小写噪声（"nebulae"、"motion"）。
+    .filter((s) => s
+      && /^[A-Z\u00C0-\u024F\u0400-\u04FF\u4e00-\u9fff\u3040-\u30ff]/.test(s)
+      && !TOPIC_WORDS.test(s)
+      && !EXIF_WORDS.test(s)
+      && !/^the\b/i.test(s))
+    .slice(0, 4);
+}
+
+/** Nominatim 地理编码，带缓存与限速（公开服务要求 <=1 req/s 且必须带 UA） */
+async function geocodePlace(name) {
+  const cache = loadGeoCache();
+  const key = name.toLowerCase();
+  if (key in cache) return cache[key];
+  await sleep(1100);
+  let res = null;
+  try {
+    const url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1'
+      + `&q=${encodeURIComponent(name)}`;
+    const j = await getJsonRetry(url, { 'User-Agent': 'CloudSeaShell/1.0 (research; contact via GitHub AllenS0104/CloudSeaShell)' });
+    const hit = Array.isArray(j) ? j[0] : null;
+    // 类型闸门：Nominatim 对任何输入都会尽力返回结果，所以必须确认返回的
+    // 确实是个「地方」。实测 "Lybrook Badlands" 会匹配到一个停车场
+    // （amenity），"the United States" 匹配到一条人行道（highway），
+    // 而这两者的 bbox 都极小，光靠尺寸闸门反而会当成"高精度"放行。
+    if (hit && GEO_OK_CATEGORY.has(String(hit.category || '')) && hit.boundingbox) {
+      const [s, n, w, e] = hit.boundingbox.map(Number);
+      const span = Math.max(Math.abs(n - s), Math.abs(e - w));
+      // 跨度 >1.5° 约等于省/国家级，天气上没有意义，直接判废
+      if (Number.isFinite(span) && span <= 1.5) {
+        res = {
+          lat: Number(hit.lat),
+          lon: Number(hit.lon),
+          span: Number(span.toFixed(3)),
+          cat: `${hit.category}/${hit.type}`,
+          display: hit.display_name,
+        };
+      }
+    }
+  } catch { res = null; }
+  cache[key] = res;
+  try { fs.writeFileSync(GEO_CACHE_FILE, JSON.stringify(cache)); } catch { /* 缓存写失败不致命 */ }
+  return res;
+}
+
+/** 对无坐标的晚霞条目，尝试用分类地名补一个城市级坐标 */
+async function geoFromCategories(page) {
+  for (const cand of placeCandidates(page.categories)) {
+    const hit = await geocodePlace(cand);
+    if (hit) return { ...hit, via: cand };
+  }
+  return null;
+}
+
 /** 按标题批量取详情（每批 20 个，Commons 对匿名请求的 titles 上限是 50） */
-async function commonsDetails(titles, geoByTitle = {}) {
+async function commonsDetails(titles, geoByTitle = {}, opts = {}) {
   const pages = [];
   for (let i = 0; i < titles.length; i += 20) {
     const batch = titles.slice(i, i + 20);
@@ -380,7 +510,32 @@ async function commonsDetails(titles, geoByTitle = {}) {
       pages.push(p);
     }
       }
+  // 晚霞专属：给还没有坐标的条目补一次分类地名地理编码。
+  // 放在这里而不是解析函数里，是为了让 commonsPageToObservation 保持同步，
+  // 与既有的 geosearch 注入走同一条路径。
+  if (opts.geocodeFallback) await enrichGeoFromCategories(pages);
   return pages;
+}
+
+/** 对无坐标的条目就地补上分类地名坐标；返回补上的条数 */
+async function enrichGeoFromCategories(pages) {
+  let n = 0;
+  for (const p of pages) {
+    const has = p.__geoLat != null || p.coordinates?.[0]
+      || p.imageinfo?.[0]?.extmetadata?.GPSLatitude?.value;
+    if (has) continue;
+    // 没有拍摄日期的条目（油画、渲染图）横竖会被拒，不必浪费地理编码配额
+    if (!p.imageinfo?.[0]?.extmetadata?.DateTimeOriginal?.value) continue;
+    const hit = await geoFromCategories(p);
+    if (hit) {
+      p.__geoLat = hit.lat;
+      p.__geoLon = hit.lon;
+      p.__geoVia = hit.via;
+      p.__geoSpan = hit.span;
+      n += 1;
+    }
+  }
+  return n;
 }
 
 /** geosearch：结果按定义必带坐标，是唯一能规模化拿到「有地理标记的照片」的入口 */
@@ -428,6 +583,7 @@ async function sweepCommons({ limit, kind }) {
     let offset = 0;
     let qAccepted = 0;
     let qSeen = 0;
+    let qGeocoded = 0;
     while (qSeen < limit) {
       let j;
       try {
@@ -442,19 +598,26 @@ async function sweepCommons({ limit, kind }) {
       for (const p of batch) seenTitles.add(p.title);
       qSeen += batch.length;
 
+      // 晚霞放宽到城市级坐标，把原本因 no-geo 丢掉的样本捞回来。
+      // 云海不放宽：局地现象，坐标差几百米结论就变了。
+      let geoAdded = 0;
+      if (kind === 'glow') geoAdded = await enrichGeoFromCategories(batch);
+
       const obs = batch.map((p) => commonsPageToObservation(p, { kind }));
       qAccepted += obs.filter((o) => !o.rejected).length;
+      qGeocoded += geoAdded;
       all.push(...obs);
 
       if (!j.continue?.gsroffset) break;
       offset = j.continue.gsroffset;
     }
-    console.log(`  ${q.padEnd(34)} 扫 ${String(qSeen).padStart(4)} 张 → 采纳 ${qAccepted}`);
+    console.log(`  ${q.padEnd(34)} 扫 ${String(qSeen).padStart(4)} 张 → 采纳 ${qAccepted}`
+      + (qGeocoded ? `（其中 ${qGeocoded} 条靠分类地名补坐标）` : ''));
   }
   return all;
 }
 
-async function searchCommons({ query, near, radius, limit, category }) {
+async function searchCommons({ query, near, radius, limit, category, geocodeFallback }) {
   if (near) {
     const [lat, lon] = String(near).split(',').map(Number);
     return commonsGeoSearch(lat, lon, radius || 10000, limit);
@@ -464,7 +627,7 @@ async function searchCommons({ query, near, radius, limit, category }) {
     const j = await getJsonRetry(`${COMMONS_API}&list=categorymembers`
       + `&cmtitle=${encodeURIComponent(`Category:${category}`)}&cmlimit=${Math.min(limit, 500)}&cmtype=file`);
     const titles = (j.query?.categorymembers || []).map((m) => m.title);
-    return commonsDetails(titles.slice(0, limit));
+    return commonsDetails(titles.slice(0, limit), {}, { geocodeFallback });
   }
 
   const pages = [];
@@ -480,7 +643,9 @@ async function searchCommons({ query, near, radius, limit, category }) {
     offset = j.continue.gsroffset;
     await sleep(300);
   }
-  return pages.slice(0, limit);
+  const out = pages.slice(0, limit);
+  if (geocodeFallback) await enrichGeoFromCategories(out);
+  return out;
 }
 
 /**
@@ -701,6 +866,7 @@ if (require.main === module) {
 module.exports = {
   stripHtml,
   parseCommonsDate,
+  placeCandidates,
   parseCoord,
   validCoord,
   distanceKm,

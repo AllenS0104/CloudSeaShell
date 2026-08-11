@@ -278,14 +278,36 @@ function scoreAerosolForGlow({ pm2_5, aerosolOpticalDepth, dust }) {
  * This term is added because total cloud is the one place the two labels do
  * not have to fight. On presence it is nearly signal-free (AUC 0.464, |dev|
  * 0.036 — the weakest cloud feature there), while on blaze intensity it is the
- * single most robust feature measured: AUC 0.650, 95% CI [0.509, 0.790], the
- * only one whose interval clears 0.5, with 0% missing data in both classes.
- * Blazing skies averaged 62.8% total cloud against 39.2% for dull ones.
+ * most consistent feature measured, with 0% missing data in both classes.
+ * Blazing skies averaged 58.7% total cloud against 40.7% for dull ones.
  *
- * Hence the peak sits high (50-85%) rather than mid-range, and the weight is
- * deliberately modest at 10: 61 samples with a CI lower bound of 0.509 earns a
- * nudge, not a pillar. Overcast (>95%) is pulled back down — at that point the
- * sun is sealed off and cannot light anything.
+ * Honest accounting of how the evidence moved as the cohort grew (samples were
+ * recovered by geocoding place names out of Commons categories):
+ *   n=61  AUC 0.650, 95% CI [0.509, 0.790]   paired effect +0.042 [+0.011, +0.079]
+ *   n=80  AUC 0.630, 95% CI [0.505, 0.754]   paired effect +0.028 [-0.003, +0.060]
+ *   n=85  AUC 0.611, 95% CI [0.488, 0.731]
+ * The direction replicated every time and bootstrap stayed 96.5% positive, but
+ * the effect shrank toward the mean and the interval no longer clears 0.5.
+ *
+ * That shrinkage turned out to be partly an artefact of its own. The recovered
+ * samples only carry city-level coordinates, and grouping by coordinate source
+ * showed they score *below chance* on both labels (presence 0.472, blaze 0.361)
+ * where EXIF-located samples score 0.563 / 0.477. Sunset is a wide phenomenon,
+ * but the weather variables that explain it are not — being tens of kilometres
+ * off means reading the neighbouring town's cloud cover. Those samples are now
+ * excluded by default in both audit scripts, and on the clean n=62 cohort the
+ * term still measures 0.497 overall, matching the 0.499 it was accepted at.
+ *
+ * Treat it as a real but *weak* signal either way: the honest read is that the
+ * cohort has never been large enough to call it robust.
+ *
+ * It is kept rather than reverted because it is not the kind of failure the
+ * aerosol term was: missingness is 0% in both classes, so there is no coverage
+ * confounder here, and the direction never flipped. But it is deliberately
+ * capped at a weight of 10 — a nudge, not a pillar — and it should not be
+ * leaned on further without materially more data. The peak sits high (50-85%)
+ * rather than mid-range; overcast (>95%) is pulled back down, since at that
+ * point the sun is sealed off and cannot light anything.
  */
 function scoreTotalCloud(totalCover) {
   const c = Number(totalCover);
