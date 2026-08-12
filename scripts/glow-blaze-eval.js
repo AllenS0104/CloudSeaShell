@@ -132,7 +132,30 @@ function spearman(a, b) {
 const INCLUDE_LOWGEO = process.argv.includes('--include-lowgeo');
 const LOW_GEO = 'category-geocode';
 
-function nearestIdx(times, target) {  const t = new Date(target).getTime();
+// 气溶胶与能见度的方向至今悬而未决，因为它们的缺失并不随机：CAMS 早于 2013
+// 没有覆盖，API 对无覆盖日期返回 0 而不是 null，而老照片恰好偏向大烧组。
+// 唯一能了结这件事的办法是把队列限定到每条都有真实数据的年份，让缺失率归零，
+// 再看方向是否还在。--min-year=2016 就是干这个的。
+const MIN_YEAR = Number((process.argv.find((a) => a.startsWith('--min-year=')) || '').split('=')[1] || 0);
+
+// AUC 的点估计在几十条样本上极不稳定，光看 0.56 还是 0.44 毫无意义。
+// 这里用 bootstrap 重采样给出区间：跨过 0.5 就是没有结论，不管点估计多好看。
+function bootstrapAuc(rows, iters = 2000) {
+  if (rows.length < 8) return null;
+  const out = [];
+  for (let i = 0; i < iters; i += 1) {
+    const s = [];
+    for (let j = 0; j < rows.length; j += 1) s.push(rows[Math.floor(Math.random() * rows.length)]);
+    const a = rocAuc(s);
+    if (a != null) out.push(a);
+  }
+  if (out.length < iters * 0.5) return null;
+  out.sort((x, y) => x - y);
+  return { lo: out[Math.floor(out.length * 0.025)], hi: out[Math.floor(out.length * 0.975)] };
+}
+
+function nearestIdx(times, target) {
+  const t = new Date(target).getTime();
   let bi = -1;
   let bd = Infinity;
   times.forEach((x, i) => {
@@ -145,9 +168,14 @@ function nearestIdx(times, target) {  const t = new Date(target).getTime();
 async function main() {
   const file = path.join(__dirname, '..', 'data', 'glow-intensity.json');
   const allRecs = JSON.parse(fs.readFileSync(file, 'utf8'));
-  const recs = INCLUDE_LOWGEO ? allRecs : allRecs.filter((r) => r.geoSource !== LOW_GEO);
+  let recs = INCLUDE_LOWGEO ? allRecs : allRecs.filter((r) => r.geoSource !== LOW_GEO);
   if (recs.length !== allRecs.length) {
     console.log(`已排除 ${allRecs.length - recs.length} 条城市级坐标样本（--include-lowgeo 可放回）`);
+  }
+  if (MIN_YEAR) {
+    const before = recs.length;
+    recs = recs.filter((r) => Number(String(r.date).slice(0, 4)) >= MIN_YEAR);
+    console.log(`限定 ${MIN_YEAR} 年后：${before} → ${recs.length} 条`);
   }
 
   const sorted = [...recs].sort((a, b) => a.fiery - b.fiery);
@@ -248,7 +276,7 @@ async function main() {
   }
 
   console.log('\n▌单变量诊断（日落时刻气象量 → 是否大烧）');
-  console.log('特征            AUC     |偏离|   大烧均值    寡淡均值   有效n  缺失率(大烧/寡淡)');
+  console.log('特征            AUC    95%CI              |偏离|  大烧均值   寡淡均值  有效n  缺失率(大烧/寡淡)');
   const keys = ['cloudHigh', 'cloudMid', 'cloudLow', 'cloudTotal',
     'humidity', 'visibility', 'pressure', 'wind', 'precip', 'aod', 'pm25'];
   const out = [];
@@ -267,6 +295,7 @@ async function main() {
     out.push({
       k,
       a,
+      ci: bootstrapAuc(sub),
       n: sub.length,
       missPos,
       missNeg,
@@ -277,9 +306,12 @@ async function main() {
   out.sort((x, y) => Math.abs(y.a - 0.5) - Math.abs(x.a - 0.5));
   for (const r of out) {
     const skew = Math.abs(r.missPos - r.missNeg) > 0.2 ? '  ⚠缺失率失衡，AUC 不可信' : '';
-    console.log(`${r.k.padEnd(14)} ${r.a.toFixed(3)}   ${Math.abs(r.a - 0.5).toFixed(3)}   `
-      + `${r.pm.toFixed(1).padStart(9)}  ${r.nm.toFixed(1).padStart(10)}  `
-      + `${String(r.n).padStart(5)}  ${(r.missPos * 100).toFixed(0).padStart(3)}%/${(r.missNeg * 100).toFixed(0).padStart(3)}%${skew}`);
+    // CI 跨过 0.5 就是没有结论。点估计再好看也不能写进判据——
+    // 这一栏存在的意义就是拦住"0.65 看着挺强"这种冲动。
+    const ci = r.ci ? `[${r.ci.lo.toFixed(3)},${r.ci.hi.toFixed(3)}]${r.ci.lo > 0.5 || r.ci.hi < 0.5 ? '✓' : '✗'}` : '        n/a       ';
+    console.log(`${r.k.padEnd(14)} ${r.a.toFixed(3)}  ${ci.padEnd(16)}  ${Math.abs(r.a - 0.5).toFixed(3)}  `
+      + `${r.pm.toFixed(1).padStart(8)}  ${r.nm.toFixed(1).padStart(9)}  `
+      + `${String(r.n).padStart(4)}  ${(r.missPos * 100).toFixed(0).padStart(3)}%/${(r.missNeg * 100).toFixed(0).padStart(3)}%${skew}`);
   }
 
   if (process.argv.includes('--dump')) {

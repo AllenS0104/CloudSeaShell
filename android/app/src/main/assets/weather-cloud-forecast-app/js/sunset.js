@@ -209,8 +209,24 @@ function precipPenalty(precipProb, precipAmt) {
  *      becomes a confounder correlated with whatever caused the fallback.
  *      Check per-class missing rates before believing any feature.
  *
- * To settle it properly: restrict the cohort to post-2016 photos so every
- * sample has real aerosol data, then re-measure.
+ * To settle it properly: NOT by restricting to post-2016. That was the obvious
+ * guess and it is wrong — tried it, and per-class missingness stayed at
+ * 69% / 5%. The confounder is not the photo's age at all.
+ *
+ * Open-Meteo serves aerosol from two different CAMS datasets, and probing the
+ * archive directly (same coordinate, varying year) shows the split:
+ *   CAMS European  — Europe only, from 2013, pm2_5 but *no* aod
+ *   CAMS Global    — worldwide, only from 2023, both pm2_5 and aod
+ * So before 2023 aerosol data essentially means "this photo was taken in
+ * Europe". Missingness tracks geography, not time, which is why filtering by
+ * year cannot remove it. The earlier PM2.5 numbers were partly measuring which
+ * continent the photographer was standing on.
+ *
+ * The only clean cohort is post-2023, where coverage is global. That currently
+ * leaves 22 samples (17 after applying the intensity cut-points), too few for
+ * any feature to clear the minimum-n bar. So the honest status is not "weak
+ * signal" but *unanswerable with the data we have*. Revisit when the post-2023
+ * cohort reaches roughly 60 samples; until then do not touch this curve.
  *
  * Per 云海和晚霞的形成.md, the dreamy pink / lilac / purple tones come
  * from Mie scattering off aerosols (火山灰、海盐、细颗粒污染物) of the
@@ -299,8 +315,11 @@ function scoreAerosolForGlow({ pm2_5, aerosolOpticalDepth, dust }) {
  * excluded by default in both audit scripts, and on the clean n=62 cohort the
  * term still measures 0.497 overall, matching the 0.499 it was accepted at.
  *
- * Treat it as a real but *weak* signal either way: the honest read is that the
- * cohort has never been large enough to call it robust.
+ * Treat it as a real but modest signal. On the clean EXIF-only cohort (n=62)
+ * it measures AUC 0.657 with 95% CI [0.519, 0.795], which does clear 0.5 —
+ * better than the conservative reading above, because that reading was taken
+ * on cohorts diluted with city-level coordinates. Still the strongest single
+ * feature on this label, and still capped at 10 until the cohort is larger.
  *
  * It is kept rather than reverted because it is not the kind of failure the
  * aerosol term was: missingness is 0% in both classes, so there is no coverage
